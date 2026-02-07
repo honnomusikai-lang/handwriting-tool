@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>文章収集ツール</title>
+    <style>
+        /* --- 基本設定（Touch Events最適化版） --- */
+        * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: #f5f5f5; font-family: "Hiragino Mincho ProN", serif;
+            overflow: hidden; position: fixed;
+            display: flex; flex-direction: column;
+        }
+
+        /* --- 上部：ターゲット文章表示エリア --- */
+        #target-area {
+            flex: 0 0 auto;
+            padding: 20px;
+            background: #fff;
+            border-bottom: 1px solid #ccc;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        #target-text {
+            font-size: 1.4rem;
+            color: #333;
+            letter-spacing: 0.1em;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        #progress-info {
+            font-size: 0.8rem;
+            color: #888;
+            font-family: sans-serif;
+        }
+
+        /* --- 中央：書き込みエリア --- */
+        #canvas-wrapper {
+            flex: 1;
+            position: relative;
+            margin: 20px;
+            background: #fff;
+            border-radius: 2px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            /* ノートっぽさを出す */
+            border-left: 4px solid #ff6b6b; 
+        }
+
+        canvas {
+            display: block; width: 100%; height: 100%;
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        /* ガイドライン（罫線） */
+        .guideline {
+            position: absolute;
+            left: 20px; right: 20px; top: 60%;
+            height: 1px;
+            background-color: rgba(0, 0, 255, 0.1);
+            pointer-events: none;
+        }
+        .centerline {
+            position: absolute;
+            left: 20px; right: 20px; top: 50%;
+            height: 1px;
+            border-top: 1px dashed rgba(0, 0, 0, 0.1);
+            pointer-events: none;
+        }
+
+        /* --- 下部：コントロール --- */
+        .controls {
+            flex: 0 0 80px;
+            background: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            padding-bottom: 10px; /* iPhoneのホームバー回避 */
+        }
+
+        button {
+            padding: 12px 24px; font-size: 1rem; border: none;
+            border-radius: 25px; 
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            font-family: sans-serif;
+        }
+        
+        .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; }
+        .btn-clear { background: #ff3b30; color: white; }
+        .btn-next { background: #007aff; color: white; padding: 12px 40px; }
+        
+        button:active { transform: scale(0.96); }
+
+    </style>
+</head>
+<body>
+
+    <div id="target-area">
+        <div id="target-text">読み込み中...</div>
+        <div id="progress-info">-- / --</div>
+    </div>
+    
+    <div id="canvas-wrapper">
+        <div class="guideline"></div>
+        <div class="centerline"></div>
+        <canvas id="main-canvas"></canvas>
+    </div>
+
+    <div class="controls">
+        <button class="btn-undo" onclick="undoStroke()">一画戻る</button>
+        <button class="btn-clear" onclick="clearCanvas()">書き直す</button>
+        <button class="btn-next" onclick="saveAndNext()">次へ</button>
+    </div>
+
+    <script>
+        // --- 設定 ---
+        // 文学作品から抽出した、バランスの良い文章リスト
+        const SENTENCE_LIST = [
+            "吾輩は猫である。名前はまだ無い。",
+            "どこで生れたかとんと見当がつかぬ。",
+            "何でも薄暗いじめじめした所で",
+            "ニャーニャー泣いていた事だけは記憶している。",
+            "親譲りの無鉄砲で小供の時から損ばかりしている。",
+            "小学校に居る時分学校の二階から飛び降りて",
+            "一週間ほど腰を抜かした事がある。",
+            "なぜそんな無闇をしたと聞く人があるかも知れぬ。",
+            "雨ニモマケズ風ニモマケズ",
+            "雪ニモ夏ノ暑サニモマケヌ",
+            "丈夫ナカラダヲモチ慾ハナク",
+            "決シテ瞋ラズイツモシズカニワラッテイル",
+            "国境の長いトンネルを抜けると雪国であった。",
+            "夜の底が白くなった。",
+            "信号所に汽車が止まった。",
+            "向う側の座席から娘が立って来て、",
+            "島村の前のガラス窓を落した。",
+            "祇園精舎の鐘の声、諸行無常の響きあり。",
+            "沙羅双樹の花の色、盛者必衰の理をあらはす。",
+            "おごれる人も久しからず、ただ春の夜の夢のごとし。",
+            "あいうえお かきくけこ さしすせそ",
+            "たちつてと なにぬねの はひふへほ",
+            "まみむめも やゆよ わをん",
+            "永永無窮の天地は、我々のためにあり。", // 漢字多め
+            "ペンプロッターで手書きの温かみを再現する。", // カタカナ・漢字混合
+            "AIによる筆跡の学習と生成の実験。"
+        ];
+
+        // --- 変数 ---
+        let currentIndex = 0;
+        let sentenceData = []; // 保存用データ
+        let currentStrokes = []; // 現在の行のストローク
+        let currentStroke = []; // 書きかけのストローク
+        let pageNumber = 1;
+
+        // --- DOM ---
+        const canvas = document.getElementById('main-canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        let rect = canvas.getBoundingClientRect();
+        let isDrawing = false;
+
+        // --- 初期化 ---
+        function resizeCanvas() {
+            const wrapper = document.getElementById('canvas-wrapper');
+            rect = wrapper.getBoundingClientRect();
+            
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            
+            ctx.scale(dpr, dpr);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // 再描画
+            drawCanvas();
+        }
+
+        function initApp() {
+            resizeCanvas();
+            updateUI();
+        }
+
+        function updateUI() {
+            if (currentIndex >= SENTENCE_LIST.length) {
+                document.getElementById('target-text').innerText = "すべて完了しました！";
+                document.getElementById('progress-info').innerText = "Complete";
+                return;
+            }
+            document.getElementById('target-text').innerText = SENTENCE_LIST[currentIndex];
+            document.getElementById('progress-info').innerText = `行: ${currentIndex + 1} / ${SENTENCE_LIST.length}`;
+        }
+
+        // --- 描画ロジック ---
+        function drawCanvas() {
+            // 背景クリア
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, rect.width, rect.height);
+            
+            // 既存ストロークの描画
+            currentStrokes.forEach(stroke => {
+                drawPath(stroke);
+            });
+            // 書きかけストロークの描画
+            if (currentStroke.length > 0) {
+                drawPath(currentStroke);
+            }
+        }
+
+        function drawPath(path) {
+            if (path.length < 1) return;
+            ctx.beginPath();
+            ctx.moveTo(path[0].x, path[0].y);
+            
+            for (let i = 0; i < path.length; i++) {
+                const p = path[i];
+                // 筆圧による太さ変化
+                // 文章を書くときは少し細めの方がリアル
+                const width = p.f * 1.5 + 1.0; 
+                ctx.lineWidth = width;
+                
+                // パスをつなぐ（簡易版）
+                if (i > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(path[i-1].x, path[i-1].y);
+                    ctx.lineTo(p.x, p.y);
+                    ctx.strokeStyle = '#000';
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // --- Touch Events (高パフォーマンス版) ---
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const pt = getTouchPoint(touch);
+            isDrawing = true;
+            currentStroke = [pt];
+            
+            // 即時描画（点の描画）
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, (pt.f * 1.5 + 1.0)/2, 0, Math.PI * 2);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            if (!isDrawing) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const pt = getTouchPoint(touch);
+            currentStroke.push(pt);
+
+            // 高速描画（前回の点から今回の点へ線を引く）
+            const prev = currentStroke[currentStroke.length - 2];
+            ctx.beginPath();
+            ctx.moveTo(prev.x, prev.y);
+            ctx.lineTo(pt.x, pt.y);
+            
+            const width = pt.f * 1.5 + 1.0;
+            ctx.lineWidth = width;
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+
+        }, { passive: false });
+
+        const handleEnd = (e) => {
+            if (!isDrawing) return;
+            e.preventDefault();
+            isDrawing = false;
+            if (currentStroke.length > 0) {
+                currentStrokes.push(currentStroke);
+            }
+            currentStroke = [];
+        };
+
+        canvas.addEventListener('touchend', handleEnd, { passive: false });
+        canvas.addEventListener('touchcancel', handleEnd, { passive: false });
+
+        function getTouchPoint(touch) {
+            return {
+                x: +(touch.clientX - rect.left).toFixed(1),
+                y: +(touch.clientY - rect.top).toFixed(1),
+                f: +(touch.force || 0.5).toFixed(3),
+                t: Date.now()
+            };
+        }
+
+        // --- 操作系 ---
+        function undoStroke() {
+            if (currentStrokes.length > 0) {
+                currentStrokes.pop();
+                drawCanvas(); // 全再描画
+            }
+        }
+
+        function clearCanvas() {
+            if (confirm('この行を書き直しますか？')) {
+                currentStrokes = [];
+                drawCanvas();
+            }
+        }
+
+        function saveAndNext() {
+            if (currentStrokes.length === 0) {
+                alert("まだ何も書いていません");
+                return;
+            }
+
+            // データを保存リストに追加
+            sentenceData.push({
+                text: SENTENCE_LIST[currentIndex],
+                strokes: JSON.parse(JSON.stringify(currentStrokes)), // Deep copy
+                timestamp: new Date().toISOString()
+            });
+
+            // JSONファイル出力（5行ごとに自動保存、または最後）
+            if ((currentIndex + 1) % 5 === 0 || currentIndex === SENTENCE_LIST.length - 1) {
+                downloadJSON();
+                sentenceData = []; // 保存したらメモリをクリア
+            }
+
+            // 次の行へ
+            currentIndex++;
+            currentStrokes = [];
+            drawCanvas();
+            updateUI();
+        }
+
+        function downloadJSON() {
+            const jsonString = JSON.stringify({
+                metadata: { type: "sentence", author: "User", date: new Date().toISOString() },
+                data: sentenceData
+            });
+            const blob = new Blob([jsonString], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `handwriting_sentences_${String(pageNumber).padStart(3, '0')}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            pageNumber++;
+        }
+
+        // リサイズ対応
+        window.addEventListener('load', initApp);
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(resizeCanvas, 200);
+        });
+
+    </script>
+</body>
+</html>

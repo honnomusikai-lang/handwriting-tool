@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.1</title>
+    <title>文章収集 v3.2</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -18,7 +18,8 @@
 
         html, body {
             margin: 0; padding: 0; width: 100%; height: 100%;
-            background-color: #f5f5f5; font-family: "Hiragino Mincho ProN", serif;
+            background-color: #e0e0e0; /* 背景を少し濃くしてノート部分を目立たせる */
+            font-family: "Hiragino Mincho ProN", serif;
             overflow: hidden; position: fixed;
             display: flex; flex-direction: column;
         }
@@ -36,11 +37,11 @@
         }
         #target-text {
             font-size: 1.1rem; color: #333; margin-bottom: 4px; font-weight: bold;
-            margin-top: 15px; /* ステータス表示分の余白 */
+            margin-top: 15px; 
         }
         #progress-info { font-size: 0.8rem; color: #888; font-family: sans-serif; }
 
-        /* --- デバッグ・ステータス表示 --- */
+        /* --- ステータス表示 --- */
         #status-bar {
             position: absolute; top: 5px; left: 0; width: 100%;
             display: flex; justify-content: space-between; padding: 0 10px;
@@ -55,15 +56,21 @@
         }
         .pen-active { color: #00a000 !important; }
 
-        /* --- キャンバス --- */
+        /* --- キャンバス（ここを変更！） --- */
         #canvas-wrapper {
-            flex: 1;
+            /* 以前は flex: 1 でしたが、固定高さに変更 */
+            flex: 0 0 auto; 
+            height: 300px; /* ノート1行分の十分な太さ */
+            width: 96%;
+            
+            /* 画面中央に配置 */
+            margin: auto; 
+            
             position: relative;
-            margin: 10px;
             background: #fff;
-            border-radius: 2px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            border-left: 4px solid #ff6b6b; 
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15); /* 浮き上がるような影 */
+            border-left: 6px solid #ff6b6b; 
         }
 
         canvas {
@@ -71,30 +78,32 @@
             touch-action: none; cursor: crosshair;
         }
 
+        /* ガイドラインの位置調整 */
         .guideline {
-            position: absolute; left: 10px; right: 10px; top: 60%;
-            height: 1px; background-color: rgba(0, 0, 255, 0.1); pointer-events: none;
+            position: absolute; left: 10px; right: 10px; top: 70%; /* 下めのライン */
+            height: 1px; background-color: rgba(0, 0, 255, 0.15); pointer-events: none;
         }
         .centerline {
             position: absolute; left: 10px; right: 10px; top: 50%;
-            height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.1); pointer-events: none;
+            height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
         }
 
         /* --- コントロール --- */
         .controls {
-            flex: 0 0 70px;
+            flex: 0 0 80px;
             background: #eee;
             display: flex; justify-content: center; align-items: center; gap: 15px;
             padding-bottom: 10px;
+            border-top: 1px solid #ccc;
         }
         button {
-            padding: 10px 20px; font-size: 0.9rem; border: none;
+            padding: 12px 24px; font-size: 0.9rem; border: none;
             border-radius: 25px; font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-family: sans-serif;
         }
         .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; }
         .btn-clear { background: #ff3b30; color: white; }
-        .btn-next { background: #007aff; color: white; padding: 10px 40px; }
+        .btn-next { background: #007aff; color: white; padding: 12px 40px; }
         button:active { transform: scale(0.96); }
 
     </style>
@@ -104,7 +113,7 @@
     <div id="target-area">
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
-            <div class="version-badge">v3.1 (Strict)</div>
+            <div class="version-badge">v3.2 (Slim)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
@@ -163,8 +172,6 @@
         const debugDiv = document.getElementById('touch-debug');
         
         let rect = canvas.getBoundingClientRect();
-        
-        // ペンのID管理
         let activePenId = null; 
 
         function resizeCanvas() {
@@ -222,32 +229,23 @@
         // --- 厳格なタッチ判定 ---
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
-            
-            // ペン使用中は他を無視
             if (activePenId !== null) return;
 
-            // 触れたものを解析
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
-                
-                // デバッグ表示：何が触れたかを表示
-                // Apple Pencilなら 'stylus'、指なら 'direct' になる
                 if (t.touchType === 'stylus') {
-                    // ペンだ！
                     activePenId = t.identifier;
                     debugDiv.innerText = "Pen Detected (OK)";
                     debugDiv.className = "pen-active";
 
                     const pt = getTouchPoint(t);
                     currentStroke = [pt];
-                    
                     ctx.beginPath();
                     ctx.arc(pt.x, pt.y, (pt.f * 1.5 + 1.0)/2, 0, Math.PI * 2);
                     ctx.fillStyle = '#000';
                     ctx.fill();
                     break;
                 } else {
-                    // ペンじゃない（指など）
                     debugDiv.innerText = `Ignored: ${t.touchType || 'unknown'}`;
                     debugDiv.className = "";
                 }
@@ -263,7 +261,6 @@
                 if (t.identifier === activePenId) {
                     const pt = getTouchPoint(t);
                     currentStroke.push(pt);
-
                     const prev = currentStroke[currentStroke.length - 2];
                     if (prev) {
                         ctx.beginPath();
@@ -282,7 +279,6 @@
         const handleEnd = (e) => {
             if (activePenId === null) return;
             e.preventDefault();
-
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 if (t.identifier === activePenId) {
@@ -353,7 +349,6 @@
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(resizeCanvas, 200);
         });
-
     </script>
 </body>
 </html>

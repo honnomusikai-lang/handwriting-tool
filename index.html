@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集ツール</title>
+    <title>文章収集 (パームリジェクション版)</title>
     <style>
-        /* --- 基本設定（Touch Events最適化版） --- */
+        /* --- 基本設定 --- */
         * {
             -webkit-touch-callout: none;
             -webkit-user-select: none;
@@ -23,95 +23,78 @@
             display: flex; flex-direction: column;
         }
 
-        /* --- 上部：ターゲット文章表示エリア --- */
+        /* --- ターゲット文章 --- */
         #target-area {
             flex: 0 0 auto;
-            padding: 20px;
+            padding: 15px;
             background: #fff;
             border-bottom: 1px solid #ccc;
             text-align: center;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             z-index: 10;
         }
-
         #target-text {
-            font-size: 1.4rem;
-            color: #333;
-            letter-spacing: 0.1em;
-            margin-bottom: 5px;
-            font-weight: bold;
+            font-size: 1.2rem; color: #333; letter-spacing: 0.05em; margin-bottom: 5px; font-weight: bold;
         }
-        
-        #progress-info {
-            font-size: 0.8rem;
-            color: #888;
-            font-family: sans-serif;
-        }
+        #progress-info { font-size: 0.8rem; color: #888; font-family: sans-serif; }
 
-        /* --- 中央：書き込みエリア --- */
+        /* --- キャンバス --- */
         #canvas-wrapper {
             flex: 1;
             position: relative;
-            margin: 20px;
+            margin: 10px;
             background: #fff;
             border-radius: 2px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            /* ノートっぽさを出す */
             border-left: 4px solid #ff6b6b; 
         }
 
         canvas {
             display: block; width: 100%; height: 100%;
-            touch-action: none;
-            cursor: crosshair;
+            touch-action: none; cursor: crosshair;
         }
 
-        /* ガイドライン（罫線） */
+        /* ガイドライン */
         .guideline {
-            position: absolute;
-            left: 20px; right: 20px; top: 60%;
-            height: 1px;
-            background-color: rgba(0, 0, 255, 0.1);
-            pointer-events: none;
+            position: absolute; left: 10px; right: 10px; top: 60%;
+            height: 1px; background-color: rgba(0, 0, 255, 0.1); pointer-events: none;
         }
         .centerline {
-            position: absolute;
-            left: 20px; right: 20px; top: 50%;
-            height: 1px;
-            border-top: 1px dashed rgba(0, 0, 0, 0.1);
-            pointer-events: none;
+            position: absolute; left: 10px; right: 10px; top: 50%;
+            height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.1); pointer-events: none;
         }
 
-        /* --- 下部：コントロール --- */
+        /* --- コントロール --- */
         .controls {
-            flex: 0 0 80px;
+            flex: 0 0 70px;
             background: #eee;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 15px;
-            padding-bottom: 10px; /* iPhoneのホームバー回避 */
+            display: flex; justify-content: center; align-items: center; gap: 15px;
+            padding-bottom: 10px;
         }
 
         button {
-            padding: 12px 24px; font-size: 1rem; border: none;
-            border-radius: 25px; 
-            font-weight: bold;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            font-family: sans-serif;
+            padding: 10px 20px; font-size: 0.9rem; border: none;
+            border-radius: 25px; font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-family: sans-serif;
         }
-        
         .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; }
         .btn-clear { background: #ff3b30; color: white; }
-        .btn-next { background: #007aff; color: white; padding: 12px 40px; }
-        
+        .btn-next { background: #007aff; color: white; padding: 10px 40px; }
         button:active { transform: scale(0.96); }
+
+        /* ペンシル専用モードの表示 */
+        #pen-status {
+            position: absolute; top: 5px; right: 10px;
+            font-size: 0.7rem; color: #aaa;
+            pointer-events: none;
+        }
 
     </style>
 </head>
 <body>
 
     <div id="target-area">
+        <div id="pen-status">Apple Pencil Only</div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
     </div>
@@ -123,14 +106,13 @@
     </div>
 
     <div class="controls">
-        <button class="btn-undo" onclick="undoStroke()">一画戻る</button>
-        <button class="btn-clear" onclick="clearCanvas()">書き直す</button>
+        <button class="btn-undo" onclick="undoStroke()">戻る</button>
+        <button class="btn-clear" onclick="clearCanvas()">クリア</button>
         <button class="btn-next" onclick="saveAndNext()">次へ</button>
     </div>
 
     <script>
         // --- 設定 ---
-        // 文学作品から抽出した、バランスの良い文章リスト
         const SENTENCE_LIST = [
             "吾輩は猫である。名前はまだ無い。",
             "どこで生れたかとんと見当がつかぬ。",
@@ -155,38 +137,31 @@
             "あいうえお かきくけこ さしすせそ",
             "たちつてと なにぬねの はひふへほ",
             "まみむめも やゆよ わをん",
-            "永永無窮の天地は、我々のためにあり。", // 漢字多め
-            "ペンプロッターで手書きの温かみを再現する。", // カタカナ・漢字混合
+            "永永無窮の天地は、我々のためにあり。",
+            "ペンプロッターで手書きの温かみを再現する。",
             "AIによる筆跡の学習と生成の実験。"
         ];
 
-        // --- 変数 ---
         let currentIndex = 0;
-        let sentenceData = []; // 保存用データ
-        let currentStrokes = []; // 現在の行のストローク
-        let currentStroke = []; // 書きかけのストローク
+        let sentenceData = [];
+        let currentStrokes = [];
+        let currentStroke = [];
         let pageNumber = 1;
 
-        // --- DOM ---
         const canvas = document.getElementById('main-canvas');
         const ctx = canvas.getContext('2d', { alpha: false });
         let rect = canvas.getBoundingClientRect();
         let isDrawing = false;
 
-        // --- 初期化 ---
         function resizeCanvas() {
             const wrapper = document.getElementById('canvas-wrapper');
             rect = wrapper.getBoundingClientRect();
-            
             const dpr = window.devicePixelRatio || 1;
             canvas.width = rect.width * dpr;
             canvas.height = rect.height * dpr;
-            
             ctx.scale(dpr, dpr);
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            
-            // 再描画
             drawCanvas();
         }
 
@@ -205,17 +180,13 @@
             document.getElementById('progress-info').innerText = `行: ${currentIndex + 1} / ${SENTENCE_LIST.length}`;
         }
 
-        // --- 描画ロジック ---
         function drawCanvas() {
-            // 背景クリア
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, rect.width, rect.height);
             
-            // 既存ストロークの描画
             currentStrokes.forEach(stroke => {
                 drawPath(stroke);
             });
-            // 書きかけストロークの描画
             if (currentStroke.length > 0) {
                 drawPath(currentStroke);
             }
@@ -228,12 +199,8 @@
             
             for (let i = 0; i < path.length; i++) {
                 const p = path[i];
-                // 筆圧による太さ変化
-                // 文章を書くときは少し細めの方がリアル
                 const width = p.f * 1.5 + 1.0; 
                 ctx.lineWidth = width;
-                
-                // パスをつなぐ（簡易版）
                 if (i > 0) {
                     ctx.beginPath();
                     ctx.moveTo(path[i-1].x, path[i-1].y);
@@ -244,15 +211,31 @@
             }
         }
 
-        // --- Touch Events (高パフォーマンス版) ---
+        // --- パームリジェクション判定ロジック ---
+        function isStylus(touch) {
+            // touchType が 'stylus' (Apple Pencil) の場合のみ true
+            // touchType が 'direct' (指) の場合は false
+            // 古いiOS等で touchType が未定義の場合は、安全のため true (許可) に倒すが
+            // 近年のiPadなら確実に取れる
+            if (touch.touchType === 'stylus') return true;
+            if (touch.touchType === 'direct') return false;
+            return true; // 不明な場合（PCのマウスなど）は許可
+        }
+
         canvas.addEventListener('touchstart', e => {
-            e.preventDefault();
+            e.preventDefault(); // スクロール等の無効化
+            
+            // 最初のタッチポイントをチェック
             const touch = e.touches[0];
+            
+            // ★ここが重要：ペン以外なら無視して終了
+            if (!isStylus(touch)) return;
+
             const pt = getTouchPoint(touch);
             isDrawing = true;
             currentStroke = [pt];
             
-            // 即時描画（点の描画）
+            // 点を描画
             ctx.beginPath();
             ctx.arc(pt.x, pt.y, (pt.f * 1.5 + 1.0)/2, 0, Math.PI * 2);
             ctx.fillStyle = '#000';
@@ -263,11 +246,15 @@
         canvas.addEventListener('touchmove', e => {
             if (!isDrawing) return;
             e.preventDefault();
+            
             const touch = e.touches[0];
+            
+            // 念のためここでもチェック（指が滑ってきた場合など）
+            if (!isStylus(touch)) return;
+
             const pt = getTouchPoint(touch);
             currentStroke.push(pt);
 
-            // 高速描画（前回の点から今回の点へ線を引く）
             const prev = currentStroke[currentStroke.length - 2];
             ctx.beginPath();
             ctx.moveTo(prev.x, prev.y);
@@ -281,6 +268,8 @@
         }, { passive: false });
 
         const handleEnd = (e) => {
+            // touchup は touchType が取れないことがあるが、
+            // drawing フラグが立っているなら終了処理をする
             if (!isDrawing) return;
             e.preventDefault();
             isDrawing = false;
@@ -306,7 +295,7 @@
         function undoStroke() {
             if (currentStrokes.length > 0) {
                 currentStrokes.pop();
-                drawCanvas(); // 全再描画
+                drawCanvas();
             }
         }
 
@@ -323,20 +312,18 @@
                 return;
             }
 
-            // データを保存リストに追加
             sentenceData.push({
                 text: SENTENCE_LIST[currentIndex],
-                strokes: JSON.parse(JSON.stringify(currentStrokes)), // Deep copy
+                strokes: JSON.parse(JSON.stringify(currentStrokes)),
                 timestamp: new Date().toISOString()
             });
 
-            // JSONファイル出力（5行ごとに自動保存、または最後）
+            // 5行ごとに保存
             if ((currentIndex + 1) % 5 === 0 || currentIndex === SENTENCE_LIST.length - 1) {
                 downloadJSON();
-                sentenceData = []; // 保存したらメモリをクリア
+                sentenceData = [];
             }
 
-            // 次の行へ
             currentIndex++;
             currentStrokes = [];
             drawCanvas();
@@ -359,7 +346,6 @@
             pageNumber++;
         }
 
-        // リサイズ対応
         window.addEventListener('load', initApp);
         let resizeTimeout;
         window.addEventListener('resize', () => {

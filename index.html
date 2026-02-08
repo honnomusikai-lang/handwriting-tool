@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.2</title>
+    <title>文章収集 v3.3</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -18,13 +18,13 @@
 
         html, body {
             margin: 0; padding: 0; width: 100%; height: 100%;
-            background-color: #e0e0e0; /* 背景を少し濃くしてノート部分を目立たせる */
+            background-color: #e0e0e0;
             font-family: "Hiragino Mincho ProN", serif;
             overflow: hidden; position: fixed;
             display: flex; flex-direction: column;
         }
 
-        /* --- ヘッダー情報 --- */
+        /* --- ヘッダー --- */
         #target-area {
             flex: 0 0 auto;
             padding: 10px;
@@ -41,7 +41,7 @@
         }
         #progress-info { font-size: 0.8rem; color: #888; font-family: sans-serif; }
 
-        /* --- ステータス表示 --- */
+        /* --- ステータス --- */
         #status-bar {
             position: absolute; top: 5px; left: 0; width: 100%;
             display: flex; justify-content: space-between; padding: 0 10px;
@@ -56,20 +56,16 @@
         }
         .pen-active { color: #00a000 !important; }
 
-        /* --- キャンバス（ここを変更！） --- */
+        /* --- キャンバス --- */
         #canvas-wrapper {
-            /* 以前は flex: 1 でしたが、固定高さに変更 */
             flex: 0 0 auto; 
-            height: 300px; /* ノート1行分の十分な太さ */
+            height: 300px;
             width: 96%;
-            
-            /* 画面中央に配置 */
             margin: auto; 
-            
             position: relative;
             background: #fff;
             border-radius: 4px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15); /* 浮き上がるような影 */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
             border-left: 6px solid #ff6b6b; 
         }
 
@@ -78,15 +74,18 @@
             touch-action: none; cursor: crosshair;
         }
 
-        /* ガイドラインの位置調整 */
+        /* ガイドラインの位置調整 (ここを変更！) */
         .guideline {
-            position: absolute; left: 10px; right: 10px; top: 70%; /* 下めのライン */
+            /* 実線：70% -> 60% に変更 */
+            position: absolute; left: 10px; right: 10px; top: 60%; 
             height: 1px; background-color: rgba(0, 0, 255, 0.15); pointer-events: none;
         }
         .centerline {
+            /* 点線：50% (維持) */
             position: absolute; left: 10px; right: 10px; top: 50%;
             height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
         }
+        /* これで距離が 20% -> 10% になりました */
 
         /* --- コントロール --- */
         .controls {
@@ -113,7 +112,7 @@
     <div id="target-area">
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
-            <div class="version-badge">v3.2 (Slim)</div>
+            <div class="version-badge">v3.3 (Narrow)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>

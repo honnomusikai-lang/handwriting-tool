@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 (厳格パームリジェクション)</title>
+    <title>文章収集 v3.1</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -23,10 +23,10 @@
             display: flex; flex-direction: column;
         }
 
-        /* --- ターゲット文章 --- */
+        /* --- ヘッダー情報 --- */
         #target-area {
             flex: 0 0 auto;
-            padding: 15px;
+            padding: 10px;
             background: #fff;
             border-bottom: 1px solid #ccc;
             text-align: center;
@@ -35,17 +35,25 @@
             position: relative;
         }
         #target-text {
-            font-size: 1.2rem; color: #333; letter-spacing: 0.05em; margin-bottom: 5px; font-weight: bold;
+            font-size: 1.1rem; color: #333; margin-bottom: 4px; font-weight: bold;
+            margin-top: 15px; /* ステータス表示分の余白 */
         }
         #progress-info { font-size: 0.8rem; color: #888; font-family: sans-serif; }
 
-        /* ステータス表示（デバッグ用） */
-        #stylus-status {
-            position: absolute; top: 10px; right: 10px;
-            font-size: 0.7rem; color: #aaa;
-            border: 1px solid #ddd; padding: 2px 6px; border-radius: 4px;
+        /* --- デバッグ・ステータス表示 --- */
+        #status-bar {
+            position: absolute; top: 5px; left: 0; width: 100%;
+            display: flex; justify-content: space-between; padding: 0 10px;
+            pointer-events: none;
         }
-        .status-active { background-color: #d4edda; color: #155724 !important; border-color: #c3e6cb !important; }
+        .version-badge {
+            font-size: 0.7rem; background: #333; color: #fff; 
+            padding: 2px 6px; border-radius: 4px; font-family: sans-serif;
+        }
+        #touch-debug {
+            font-size: 0.7rem; color: #f00; font-family: monospace; font-weight: bold;
+        }
+        .pen-active { color: #00a000 !important; }
 
         /* --- キャンバス --- */
         #canvas-wrapper {
@@ -63,7 +71,6 @@
             touch-action: none; cursor: crosshair;
         }
 
-        /* ガイドライン */
         .guideline {
             position: absolute; left: 10px; right: 10px; top: 60%;
             height: 1px; background-color: rgba(0, 0, 255, 0.1); pointer-events: none;
@@ -80,7 +87,6 @@
             display: flex; justify-content: center; align-items: center; gap: 15px;
             padding-bottom: 10px;
         }
-
         button {
             padding: 10px 20px; font-size: 0.9rem; border: none;
             border-radius: 25px; font-weight: bold;
@@ -96,7 +102,10 @@
 <body>
 
     <div id="target-area">
-        <div id="stylus-status">No Pen</div>
+        <div id="status-bar">
+            <div id="touch-debug">Waiting...</div>
+            <div class="version-badge">v3.1 (Strict)</div>
+        </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
     </div>
@@ -151,11 +160,11 @@
 
         const canvas = document.getElementById('main-canvas');
         const ctx = canvas.getContext('2d', { alpha: false });
-        const statusDiv = document.getElementById('stylus-status');
+        const debugDiv = document.getElementById('touch-debug');
         
         let rect = canvas.getBoundingClientRect();
         
-        // ★重要：ペンのタッチIDだけを記憶する変数
+        // ペンのID管理
         let activePenId = null; 
 
         function resizeCanvas() {
@@ -210,50 +219,47 @@
             }
         }
 
-        // --- 厳格なタッチ判定ロジック ---
-        
+        // --- 厳格なタッチ判定 ---
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
             
-            // すでにペンで書いている最中なら、他のタッチ（手など）は無視
+            // ペン使用中は他を無視
             if (activePenId !== null) return;
 
-            // 触れた指（タッチ）の中から「スタイラス」を探す
+            // 触れたものを解析
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 
-                // ★ここが最重要：touchType が 'stylus' でなければ絶対に許可しない
+                // デバッグ表示：何が触れたかを表示
+                // Apple Pencilなら 'stylus'、指なら 'direct' になる
                 if (t.touchType === 'stylus') {
-                    activePenId = t.identifier; // ペンのIDを確保
-                    
-                    // UI更新
-                    statusDiv.innerText = "Pen Detected";
-                    statusDiv.classList.add("status-active");
+                    // ペンだ！
+                    activePenId = t.identifier;
+                    debugDiv.innerText = "Pen Detected (OK)";
+                    debugDiv.className = "pen-active";
 
                     const pt = getTouchPoint(t);
                     currentStroke = [pt];
                     
-                    // 描画開始（点）
                     ctx.beginPath();
                     ctx.arc(pt.x, pt.y, (pt.f * 1.5 + 1.0)/2, 0, Math.PI * 2);
                     ctx.fillStyle = '#000';
                     ctx.fill();
-                    
-                    // ペンが見つかったらループ終了
                     break;
+                } else {
+                    // ペンじゃない（指など）
+                    debugDiv.innerText = `Ignored: ${t.touchType || 'unknown'}`;
+                    debugDiv.className = "";
                 }
             }
         }, { passive: false });
 
         canvas.addEventListener('touchmove', e => {
-            // ペンがアクティブでないなら何もしない
             if (activePenId === null) return;
             e.preventDefault();
 
-            // 動いたタッチの中から、確保したペンのIDと一致するものを探す
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
-                
                 if (t.identifier === activePenId) {
                     const pt = getTouchPoint(t);
                     currentStroke.push(pt);
@@ -268,7 +274,7 @@
                         ctx.strokeStyle = '#000';
                         ctx.stroke();
                     }
-                    break; // 処理完了
+                    break;
                 }
             }
         }, { passive: false });
@@ -277,20 +283,14 @@
             if (activePenId === null) return;
             e.preventDefault();
 
-            // 離れたタッチの中に、ペンのIDがあるか確認
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
-                
                 if (t.identifier === activePenId) {
-                    // ペンが離れた！
-                    if (currentStroke.length > 0) {
-                        currentStrokes.push(currentStroke);
-                    }
+                    if (currentStroke.length > 0) currentStrokes.push(currentStroke);
                     currentStroke = [];
-                    activePenId = null; // IDリセット
-                    
-                    statusDiv.innerText = "No Pen";
-                    statusDiv.classList.remove("status-active");
+                    activePenId = null;
+                    debugDiv.innerText = "Pen Lifted";
+                    debugDiv.className = "";
                     break;
                 }
             }
@@ -310,21 +310,13 @@
 
         // --- 操作系 ---
         function undoStroke() {
-            if (currentStrokes.length > 0) {
-                currentStrokes.pop();
-                drawCanvas();
-            }
+            if (currentStrokes.length > 0) { currentStrokes.pop(); drawCanvas(); }
         }
         function clearCanvas() {
-            if (confirm('この行を書き直しますか？')) {
-                currentStrokes = [];
-                drawCanvas();
-            }
+            if (confirm('書き直しますか？')) { currentStrokes = []; drawCanvas(); }
         }
         function saveAndNext() {
-            if (currentStrokes.length === 0) {
-                alert("まだ何も書いていません"); return;
-            }
+            if (currentStrokes.length === 0) { alert("まだ何も書いていません"); return; }
             sentenceData.push({
                 text: SENTENCE_LIST[currentIndex],
                 strokes: JSON.parse(JSON.stringify(currentStrokes)),

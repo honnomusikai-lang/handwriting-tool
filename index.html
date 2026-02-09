@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.4</title>
+    <title>文章収集 v3.5</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -12,7 +12,7 @@
             -webkit-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
-            /* 全体はタッチ無効だが、下でボタンだけ有効化する */
+            /* 全体タッチ無効（ボタンで個別有効化） */
             touch-action: none; 
             box-sizing: border-box;
         }
@@ -75,26 +75,28 @@
             touch-action: none; cursor: crosshair;
         }
 
-        /* ガイドライン (距離15%に変更) */
+        /* ガイドライン (距離20%に変更) */
         .guideline {
-            /* 50% + 15% = 65% の位置 */
-            position: absolute; left: 10px; right: 10px; top: 65%; 
+            /* 50% + 20% = 70% の位置 */
+            position: absolute; left: 10px; right: 10px; top: 70%; 
             height: 1px; background-color: rgba(0, 0, 255, 0.15); pointer-events: none;
         }
         .centerline {
-            /* 中心 50% */
             position: absolute; left: 10px; right: 10px; top: 50%;
             height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
         }
 
         /* --- コントロール --- */
         .controls {
-            flex: 0 0 80px;
+            flex: 0 0 90px; /* 高さを少し増やして余裕を持たせる */
             background: #eee;
             display: flex; justify-content: center; align-items: center; gap: 15px;
-            padding-bottom: 10px;
+            
+            /* iPhone/iPadの下部バー対策でパディングを増やす */
+            padding-bottom: 20px; 
+            
             border-top: 1px solid #ccc;
-            z-index: 20; /* 前面に持ってくる */
+            z-index: 20;
         }
         
         button {
@@ -102,16 +104,26 @@
             border-radius: 25px; font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-family: sans-serif;
             
-            /* ★修正ポイント: ボタンだけはタッチ操作を許可する */
+            /* タッチ操作を許可 */
             touch-action: manipulation; 
             pointer-events: auto;
             cursor: pointer;
+            transition: all 0.1s;
         }
         
         .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; }
-        .btn-clear { background: #ff3b30; color: white; }
+        .btn-clear { background: #ff3b30; color: white; width: 100px; /* 幅固定で文字変化に対応 */ }
         .btn-next { background: #007aff; color: white; padding: 12px 40px; }
-        button:active { transform: scale(0.96); opacity: 0.8; }
+        
+        /* 押した時の見た目 */
+        button:active { transform: scale(0.95); opacity: 0.8; }
+        
+        /* 確認モードのスタイル */
+        .btn-confirm-mode {
+            background: #d00000 !important;
+            animation: pulse 0.5s infinite alternate;
+        }
+        @keyframes pulse { from { opacity: 1; } to { opacity: 0.7; } }
 
     </style>
 </head>
@@ -120,7 +132,7 @@
     <div id="target-area">
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
-            <div class="version-badge">v3.4 (Fixed)</div>
+            <div class="version-badge">v3.5 (ButtonFix)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
@@ -133,9 +145,9 @@
     </div>
 
     <div class="controls">
-        <button class="btn-undo" onclick="undoStroke()">戻る</button>
-        <button class="btn-clear" onclick="clearCanvas()">クリア</button>
-        <button class="btn-next" onclick="saveAndNext()">次へ</button>
+        <button id="btn-undo" class="btn-undo">戻る</button>
+        <button id="btn-clear" class="btn-clear">クリア</button>
+        <button id="btn-next" class="btn-next">次へ</button>
     </div>
 
     <script>
@@ -181,6 +193,7 @@
         let rect = canvas.getBoundingClientRect();
         let activePenId = null; 
 
+        // --- 初期化 ---
         function resizeCanvas() {
             const wrapper = document.getElementById('canvas-wrapper');
             rect = wrapper.getBoundingClientRect();
@@ -196,6 +209,7 @@
         function initApp() {
             resizeCanvas();
             updateUI();
+            setupButtons(); // ボタン設定
         }
 
         function updateUI() {
@@ -208,6 +222,51 @@
             document.getElementById('progress-info').innerText = `行: ${currentIndex + 1} / ${SENTENCE_LIST.length}`;
         }
 
+        // --- ボタン制御 (JSでイベントを直接つかむ) ---
+        function setupButtons() {
+            // 戻るボタン
+            document.getElementById('btn-undo').addEventListener('touchstart', (e) => {
+                e.preventDefault(); // ダブルタップズーム等を防止
+                undoStroke();
+            });
+
+            // 次へボタン
+            document.getElementById('btn-next').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                saveAndNext();
+            });
+
+            // クリアボタン（2段階認証）
+            const clearBtn = document.getElementById('btn-clear');
+            let clearTimer = null;
+
+            clearBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                
+                if (clearBtn.classList.contains('btn-confirm-mode')) {
+                    // 2回目タップ：実行
+                    currentStrokes = [];
+                    drawCanvas();
+                    // 元に戻す
+                    clearBtn.innerText = "クリア";
+                    clearBtn.classList.remove('btn-confirm-mode');
+                    if (clearTimer) clearTimeout(clearTimer);
+                } else {
+                    // 1回目タップ：確認モードへ
+                    clearBtn.innerText = "実行?";
+                    clearBtn.classList.add('btn-confirm-mode');
+                    
+                    // 3秒経ったら元に戻る
+                    clearTimer = setTimeout(() => {
+                        clearBtn.innerText = "クリア";
+                        clearBtn.classList.remove('btn-confirm-mode');
+                    }, 3000);
+                }
+            });
+        }
+
+
+        // --- 描画関連 ---
         function drawCanvas() {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, rect.width, rect.height);
@@ -233,18 +292,16 @@
             }
         }
 
-        // --- 厳格なタッチ判定 ---
+        // --- タッチ判定 ---
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
             if (activePenId !== null) return;
-
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 if (t.touchType === 'stylus') {
                     activePenId = t.identifier;
-                    debugDiv.innerText = "Pen Detected (OK)";
+                    debugDiv.innerText = "Pen Detected";
                     debugDiv.className = "pen-active";
-
                     const pt = getTouchPoint(t);
                     currentStroke = [pt];
                     ctx.beginPath();
@@ -252,9 +309,6 @@
                     ctx.fillStyle = '#000';
                     ctx.fill();
                     break;
-                } else {
-                    debugDiv.innerText = `Ignored: ${t.touchType || 'unknown'}`;
-                    debugDiv.className = "";
                 }
             }
         }, { passive: false });
@@ -262,7 +316,6 @@
         canvas.addEventListener('touchmove', e => {
             if (activePenId === null) return;
             e.preventDefault();
-
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 if (t.identifier === activePenId) {
@@ -292,7 +345,7 @@
                     if (currentStroke.length > 0) currentStrokes.push(currentStroke);
                     currentStroke = [];
                     activePenId = null;
-                    debugDiv.innerText = "Pen Lifted";
+                    debugDiv.innerText = "Waiting...";
                     debugDiv.className = "";
                     break;
                 }
@@ -311,12 +364,9 @@
             };
         }
 
-        // --- 操作系 ---
+        // --- ロジック ---
         function undoStroke() {
             if (currentStrokes.length > 0) { currentStrokes.pop(); drawCanvas(); }
-        }
-        function clearCanvas() {
-            if (confirm('書き直しますか？')) { currentStrokes = []; drawCanvas(); }
         }
         function saveAndNext() {
             if (currentStrokes.length === 0) { alert("まだ何も書いていません"); return; }

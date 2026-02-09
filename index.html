@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.6</title>
+    <title>文章収集 v3.7</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -83,32 +83,24 @@
             height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
         }
 
-        /* --- コントロール（高さ拡張） --- */
+        /* --- コントロール --- */
         .controls {
-            flex: 0 0 130px; /* スライダー用に高さを確保 */
+            flex: 0 0 130px; 
             background: #eee;
-            display: flex; flex-direction: column; /* 縦並びに変更 */
+            display: flex; flex-direction: column;
             justify-content: center; align-items: center; gap: 10px;
             padding-bottom: 20px; 
             border-top: 1px solid #ccc;
             z-index: 20;
         }
         
-        .buttons-row {
-            display: flex; gap: 15px;
-        }
+        .buttons-row { display: flex; gap: 15px; }
 
-        /* --- スライダー設定 --- */
         .slider-container {
-            width: 80%;
-            display: flex; align-items: center; gap: 10px;
+            width: 80%; display: flex; align-items: center; gap: 10px;
             font-size: 0.8rem; color: #555;
         }
-        input[type=range] {
-            flex: 1;
-            accent-color: #333;
-            touch-action: manipulation;
-        }
+        input[type=range] { flex: 1; accent-color: #333; touch-action: manipulation; }
 
         button {
             padding: 12px 24px; font-size: 0.9rem; border: none;
@@ -117,17 +109,11 @@
             touch-action: manipulation; 
             pointer-events: auto; cursor: pointer; transition: all 0.1s;
         }
-        
         .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; }
         .btn-clear { background: #ff3b30; color: white; width: 100px; }
         .btn-next { background: #007aff; color: white; padding: 12px 40px; }
-        
         button:active { transform: scale(0.95); opacity: 0.8; }
-        
-        .btn-confirm-mode {
-            background: #d00000 !important;
-            animation: pulse 0.5s infinite alternate;
-        }
+        .btn-confirm-mode { background: #d00000 !important; animation: pulse 0.5s infinite alternate; }
         @keyframes pulse { from { opacity: 1; } to { opacity: 0.7; } }
 
     </style>
@@ -137,7 +123,7 @@
     <div id="target-area">
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
-            <div class="version-badge">v3.6 (Pro)</div>
+            <div class="version-badge">v3.7 (Perfect)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
@@ -152,11 +138,10 @@
     <div class="controls">
         <div class="slider-container">
             <span>感度:高</span>
-            <input type="range" id="force-threshold" min="0" max="0.3" step="0.01" value="0.05">
+            <input type="range" id="force-threshold" min="0" max="0.2" step="0.01" value="0.05">
             <span>低</span>
             <span id="threshold-val">0.05</span>
         </div>
-
         <div class="buttons-row">
             <button id="btn-undo" class="btn-undo">戻る</button>
             <button id="btn-clear" class="btn-clear">クリア</button>
@@ -206,11 +191,8 @@
         
         let rect = canvas.getBoundingClientRect();
         let activePenId = null; 
-
-        // ★筆圧しきい値（デフォルト0.05）
         let pressureThreshold = 0.05;
 
-        // --- 初期化 ---
         function resizeCanvas() {
             const wrapper = document.getElementById('canvas-wrapper');
             rect = wrapper.getBoundingClientRect();
@@ -239,18 +221,14 @@
             document.getElementById('progress-info').innerText = `行: ${currentIndex + 1} / ${SENTENCE_LIST.length}`;
         }
 
-        // --- コントロール制御 ---
         function setupControls() {
-            // スライダー制御
             const slider = document.getElementById('force-threshold');
             const valLabel = document.getElementById('threshold-val');
-            
             slider.addEventListener('input', (e) => {
                 pressureThreshold = parseFloat(e.target.value);
                 valLabel.innerText = pressureThreshold.toFixed(2);
             });
 
-            // ボタン制御
             document.getElementById('btn-undo').addEventListener('touchstart', (e) => {
                 e.preventDefault(); undoStroke();
             });
@@ -280,7 +258,6 @@
             });
         }
 
-        // --- 描画関連 ---
         function drawCanvas() {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, rect.width, rect.height);
@@ -294,7 +271,6 @@
             ctx.moveTo(path[0].x, path[0].y);
             for (let i = 0; i < path.length; i++) {
                 const p = path[i];
-                // 描画時の太さ計算
                 const width = p.f * 1.5 + 1.0; 
                 ctx.lineWidth = width;
                 if (i > 0) {
@@ -307,7 +283,7 @@
             }
         }
 
-        // --- タッチ判定 ---
+        // --- タッチ判定（修正版） ---
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
             if (activePenId !== null) return;
@@ -316,21 +292,24 @@
                 const t = e.changedTouches[i];
                 if (t.touchType === 'stylus') {
                     
-                    // ★筆圧フィルタリング（ここが修正点）
+                    // ★修正ポイント1: ペンIDは必ず確保する（拒否しない）
+                    activePenId = t.identifier;
                     const force = t.force || 0;
+                    
+                    // ★修正ポイント2: 筆圧が低い場合、追跡は開始するが「描画」はしない
                     if (force < pressureThreshold) {
-                        debugDiv.innerText = `Ignored (Force: ${force.toFixed(2)})`;
-                        continue; // このタッチは無視する
+                        debugDiv.innerText = `Hovering... (${force.toFixed(2)})`;
+                        // currentStrokeは初期化せず、空のままにしておく
+                        // あるいは座標だけ記録して描画フラグを折るなど
+                        return;
                     }
 
-                    activePenId = t.identifier;
-                    debugDiv.innerText = `Pen OK (Force: ${force.toFixed(2)})`;
+                    debugDiv.innerText = `Writing (${force.toFixed(2)})`;
                     debugDiv.className = "pen-active";
                     
                     const pt = getTouchPoint(t);
                     currentStroke = [pt];
                     
-                    // 点を描画
                     ctx.beginPath();
                     ctx.arc(pt.x, pt.y, (pt.f * 1.5 + 1.0)/2, 0, Math.PI * 2);
                     ctx.fillStyle = '#000';
@@ -349,17 +328,27 @@
                 const t = e.changedTouches[i];
                 if (t.identifier === activePenId) {
                     
-                    // 途中でも筆圧が低すぎたら描画しない（お好みでコメントアウト可）
                     const force = t.force || 0;
+                    const pt = getTouchPoint(t);
+
+                    // ★修正ポイント3: 途中でも筆圧が低いなら描画スキップ（ホバー中）
                     if (force < pressureThreshold) {
-                        // ストロークを中断せず、単にこの点をスキップするか、
-                        // あるいは「浮いた」とみなして終了するか？
-                        // 今回は「線が途切れる」のを防ぐため、move中はスキップのみにします
-                        continue; 
+                         debugDiv.innerText = `Hovering... (${force.toFixed(2)})`;
+                         // ここで stroke を切る処理を入れてもいいが、
+                         // 今回は「浮いている間はデータを追加しない」だけにする
+                         return;
+                    }
+                    
+                    // もしstrokeが空（書き始めがホバーだった場合）なら、ここから開始
+                    if (currentStroke.length === 0) {
+                         currentStroke = [pt];
+                         ctx.beginPath();
+                         ctx.moveTo(pt.x, pt.y); // 開始点移動
+                         return;
                     }
 
-                    const pt = getTouchPoint(t);
                     currentStroke.push(pt);
+                    debugDiv.innerText = `Writing (${force.toFixed(2)})`;
 
                     const prev = currentStroke[currentStroke.length - 2];
                     if (prev) {
@@ -404,7 +393,6 @@
             };
         }
 
-        // --- ロジック ---
         function undoStroke() {
             if (currentStrokes.length > 0) { currentStrokes.pop(); drawCanvas(); }
         }

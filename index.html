@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.3</title>
+    <title>文章収集 v3.4</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -12,7 +12,8 @@
             -webkit-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
-            touch-action: none;
+            /* 全体はタッチ無効だが、下でボタンだけ有効化する */
+            touch-action: none; 
             box-sizing: border-box;
         }
 
@@ -74,18 +75,17 @@
             touch-action: none; cursor: crosshair;
         }
 
-        /* ガイドラインの位置調整 (ここを変更！) */
+        /* ガイドライン (距離15%に変更) */
         .guideline {
-            /* 実線：70% -> 60% に変更 */
+            /* 50% + 15% = 65% の位置 */
             position: absolute; left: 10px; right: 10px; top: 65%; 
             height: 1px; background-color: rgba(0, 0, 255, 0.15); pointer-events: none;
         }
         .centerline {
-            /* 点線：50% (維持) */
+            /* 中心 50% */
             position: absolute; left: 10px; right: 10px; top: 50%;
             height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
         }
-        /* これで距離が 20% -> 10% になりました */
 
         /* --- コントロール --- */
         .controls {
@@ -94,16 +94,24 @@
             display: flex; justify-content: center; align-items: center; gap: 15px;
             padding-bottom: 10px;
             border-top: 1px solid #ccc;
+            z-index: 20; /* 前面に持ってくる */
         }
+        
         button {
             padding: 12px 24px; font-size: 0.9rem; border: none;
             border-radius: 25px; font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-family: sans-serif;
+            
+            /* ★修正ポイント: ボタンだけはタッチ操作を許可する */
+            touch-action: manipulation; 
+            pointer-events: auto;
+            cursor: pointer;
         }
+        
         .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; }
         .btn-clear { background: #ff3b30; color: white; }
         .btn-next { background: #007aff; color: white; padding: 12px 40px; }
-        button:active { transform: scale(0.96); }
+        button:active { transform: scale(0.96); opacity: 0.8; }
 
     </style>
 </head>
@@ -112,7 +120,7 @@
     <div id="target-area">
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
-            <div class="version-badge">v3.3 (Narrow)</div>
+            <div class="version-badge">v3.4 (Fixed)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
@@ -351,5 +359,3 @@
     </script>
 </body>
 </html>
-
-

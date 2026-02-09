@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.5</title>
+    <title>文章収集 v3.6</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -12,7 +12,6 @@
             -webkit-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
-            /* 全体タッチ無効（ボタンで個別有効化） */
             touch-action: none; 
             box-sizing: border-box;
         }
@@ -75,9 +74,7 @@
             touch-action: none; cursor: crosshair;
         }
 
-        /* ガイドライン (距離20%に変更) */
         .guideline {
-            /* 50% + 20% = 70% の位置 */
             position: absolute; left: 10px; right: 10px; top: 70%; 
             height: 1px; background-color: rgba(0, 0, 255, 0.15); pointer-events: none;
         }
@@ -86,39 +83,47 @@
             height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
         }
 
-        /* --- コントロール --- */
+        /* --- コントロール（高さ拡張） --- */
         .controls {
-            flex: 0 0 90px; /* 高さを少し増やして余裕を持たせる */
+            flex: 0 0 130px; /* スライダー用に高さを確保 */
             background: #eee;
-            display: flex; justify-content: center; align-items: center; gap: 15px;
-            
-            /* iPhone/iPadの下部バー対策でパディングを増やす */
+            display: flex; flex-direction: column; /* 縦並びに変更 */
+            justify-content: center; align-items: center; gap: 10px;
             padding-bottom: 20px; 
-            
             border-top: 1px solid #ccc;
             z-index: 20;
         }
         
+        .buttons-row {
+            display: flex; gap: 15px;
+        }
+
+        /* --- スライダー設定 --- */
+        .slider-container {
+            width: 80%;
+            display: flex; align-items: center; gap: 10px;
+            font-size: 0.8rem; color: #555;
+        }
+        input[type=range] {
+            flex: 1;
+            accent-color: #333;
+            touch-action: manipulation;
+        }
+
         button {
             padding: 12px 24px; font-size: 0.9rem; border: none;
             border-radius: 25px; font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-family: sans-serif;
-            
-            /* タッチ操作を許可 */
             touch-action: manipulation; 
-            pointer-events: auto;
-            cursor: pointer;
-            transition: all 0.1s;
+            pointer-events: auto; cursor: pointer; transition: all 0.1s;
         }
         
         .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; }
-        .btn-clear { background: #ff3b30; color: white; width: 100px; /* 幅固定で文字変化に対応 */ }
+        .btn-clear { background: #ff3b30; color: white; width: 100px; }
         .btn-next { background: #007aff; color: white; padding: 12px 40px; }
         
-        /* 押した時の見た目 */
         button:active { transform: scale(0.95); opacity: 0.8; }
         
-        /* 確認モードのスタイル */
         .btn-confirm-mode {
             background: #d00000 !important;
             animation: pulse 0.5s infinite alternate;
@@ -132,7 +137,7 @@
     <div id="target-area">
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
-            <div class="version-badge">v3.5 (ButtonFix)</div>
+            <div class="version-badge">v3.6 (Pro)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
@@ -145,9 +150,18 @@
     </div>
 
     <div class="controls">
-        <button id="btn-undo" class="btn-undo">戻る</button>
-        <button id="btn-clear" class="btn-clear">クリア</button>
-        <button id="btn-next" class="btn-next">次へ</button>
+        <div class="slider-container">
+            <span>感度:高</span>
+            <input type="range" id="force-threshold" min="0" max="0.3" step="0.01" value="0.05">
+            <span>低</span>
+            <span id="threshold-val">0.05</span>
+        </div>
+
+        <div class="buttons-row">
+            <button id="btn-undo" class="btn-undo">戻る</button>
+            <button id="btn-clear" class="btn-clear">クリア</button>
+            <button id="btn-next" class="btn-next">次へ</button>
+        </div>
     </div>
 
     <script>
@@ -193,6 +207,9 @@
         let rect = canvas.getBoundingClientRect();
         let activePenId = null; 
 
+        // ★筆圧しきい値（デフォルト0.05）
+        let pressureThreshold = 0.05;
+
         // --- 初期化 ---
         function resizeCanvas() {
             const wrapper = document.getElementById('canvas-wrapper');
@@ -209,7 +226,7 @@
         function initApp() {
             resizeCanvas();
             updateUI();
-            setupButtons(); // ボタン設定
+            setupControls();
         }
 
         function updateUI() {
@@ -222,41 +239,39 @@
             document.getElementById('progress-info').innerText = `行: ${currentIndex + 1} / ${SENTENCE_LIST.length}`;
         }
 
-        // --- ボタン制御 (JSでイベントを直接つかむ) ---
-        function setupButtons() {
-            // 戻るボタン
+        // --- コントロール制御 ---
+        function setupControls() {
+            // スライダー制御
+            const slider = document.getElementById('force-threshold');
+            const valLabel = document.getElementById('threshold-val');
+            
+            slider.addEventListener('input', (e) => {
+                pressureThreshold = parseFloat(e.target.value);
+                valLabel.innerText = pressureThreshold.toFixed(2);
+            });
+
+            // ボタン制御
             document.getElementById('btn-undo').addEventListener('touchstart', (e) => {
-                e.preventDefault(); // ダブルタップズーム等を防止
-                undoStroke();
+                e.preventDefault(); undoStroke();
             });
 
-            // 次へボタン
             document.getElementById('btn-next').addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                saveAndNext();
+                e.preventDefault(); saveAndNext();
             });
 
-            // クリアボタン（2段階認証）
             const clearBtn = document.getElementById('btn-clear');
             let clearTimer = null;
-
             clearBtn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                
                 if (clearBtn.classList.contains('btn-confirm-mode')) {
-                    // 2回目タップ：実行
                     currentStrokes = [];
                     drawCanvas();
-                    // 元に戻す
                     clearBtn.innerText = "クリア";
                     clearBtn.classList.remove('btn-confirm-mode');
                     if (clearTimer) clearTimeout(clearTimer);
                 } else {
-                    // 1回目タップ：確認モードへ
                     clearBtn.innerText = "実行?";
                     clearBtn.classList.add('btn-confirm-mode');
-                    
-                    // 3秒経ったら元に戻る
                     clearTimer = setTimeout(() => {
                         clearBtn.innerText = "クリア";
                         clearBtn.classList.remove('btn-confirm-mode');
@@ -264,7 +279,6 @@
                 }
             });
         }
-
 
         // --- 描画関連 ---
         function drawCanvas() {
@@ -280,6 +294,7 @@
             ctx.moveTo(path[0].x, path[0].y);
             for (let i = 0; i < path.length; i++) {
                 const p = path[i];
+                // 描画時の太さ計算
                 const width = p.f * 1.5 + 1.0; 
                 ctx.lineWidth = width;
                 if (i > 0) {
@@ -296,18 +311,31 @@
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
             if (activePenId !== null) return;
+
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 if (t.touchType === 'stylus') {
+                    
+                    // ★筆圧フィルタリング（ここが修正点）
+                    const force = t.force || 0;
+                    if (force < pressureThreshold) {
+                        debugDiv.innerText = `Ignored (Force: ${force.toFixed(2)})`;
+                        continue; // このタッチは無視する
+                    }
+
                     activePenId = t.identifier;
-                    debugDiv.innerText = "Pen Detected";
+                    debugDiv.innerText = `Pen OK (Force: ${force.toFixed(2)})`;
                     debugDiv.className = "pen-active";
+                    
                     const pt = getTouchPoint(t);
                     currentStroke = [pt];
+                    
+                    // 点を描画
                     ctx.beginPath();
                     ctx.arc(pt.x, pt.y, (pt.f * 1.5 + 1.0)/2, 0, Math.PI * 2);
                     ctx.fillStyle = '#000';
                     ctx.fill();
+                    
                     break;
                 }
             }
@@ -316,11 +344,23 @@
         canvas.addEventListener('touchmove', e => {
             if (activePenId === null) return;
             e.preventDefault();
+
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 if (t.identifier === activePenId) {
+                    
+                    // 途中でも筆圧が低すぎたら描画しない（お好みでコメントアウト可）
+                    const force = t.force || 0;
+                    if (force < pressureThreshold) {
+                        // ストロークを中断せず、単にこの点をスキップするか、
+                        // あるいは「浮いた」とみなして終了するか？
+                        // 今回は「線が途切れる」のを防ぐため、move中はスキップのみにします
+                        continue; 
+                    }
+
                     const pt = getTouchPoint(t);
                     currentStroke.push(pt);
+
                     const prev = currentStroke[currentStroke.length - 2];
                     if (prev) {
                         ctx.beginPath();

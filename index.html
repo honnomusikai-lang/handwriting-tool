@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.7</title>
+    <title>文章収集 v3.8</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -41,10 +41,10 @@
         }
         #progress-info { font-size: 0.8rem; color: #888; font-family: sans-serif; }
 
-        /* --- ステータス --- */
+        /* --- ステータス & 調整ボタン --- */
         #status-bar {
             position: absolute; top: 5px; left: 0; width: 100%;
-            display: flex; justify-content: space-between; padding: 0 10px;
+            display: flex; justify-content: space-between; align-items: center; padding: 0 10px;
             pointer-events: none;
         }
         .version-badge {
@@ -55,6 +55,13 @@
             font-size: 0.7rem; color: #f00; font-family: monospace; font-weight: bold;
         }
         .pen-active { color: #00a000 !important; }
+
+        /* キャリブレーションボタン */
+        #btn-calibrate {
+            font-size: 0.7rem; background: #666; color: #fff; 
+            padding: 4px 8px; border-radius: 4px; border: none;
+            pointer-events: auto; cursor: pointer;
+        }
 
         /* --- キャンバス --- */
         #canvas-wrapper {
@@ -83,6 +90,40 @@
             height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
         }
 
+        /* --- キャリブレーション用オーバーレイ --- */
+        #calibration-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 100;
+            display: none; /* 初期状態は非表示 */
+            flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        #calib-msg {
+            color: white; font-size: 1.2rem; margin-bottom: 20px; text-align: center;
+            pointer-events: none;
+        }
+        .crosshair {
+            position: absolute;
+            width: 40px; height: 40px;
+            border: 2px solid white;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .crosshair::before, .crosshair::after {
+            content: ''; position: absolute; background: white;
+        }
+        .crosshair::before { top: 18px; left: 0; width: 36px; height: 2px; } /* 横棒 */
+        .crosshair::after { top: 0; left: 18px; width: 2px; height: 36px; } /* 縦棒 */
+        
+        /* ターゲットエリア（タッチ判定用） */
+        #calib-target {
+            position: absolute; width: 60px; height: 60px;
+            background: transparent;
+            z-index: 101;
+            /* touch-action: none; JSで制御 */
+        }
+
         /* --- コントロール --- */
         .controls {
             flex: 0 0 130px; 
@@ -93,9 +134,7 @@
             border-top: 1px solid #ccc;
             z-index: 20;
         }
-        
         .buttons-row { display: flex; gap: 15px; }
-
         .slider-container {
             width: 80%; display: flex; align-items: center; gap: 10px;
             font-size: 0.8rem; color: #555;
@@ -120,10 +159,16 @@
 </head>
 <body>
 
+    <div id="calibration-overlay">
+        <div id="calib-msg">左上の十字の中心を<br>ペンでタッチしてください</div>
+        <div id="calib-cross" class="crosshair"></div>
+        <div id="calib-target"></div> </div>
+
     <div id="target-area">
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
-            <div class="version-badge">v3.7 (Perfect)</div>
+            <button id="btn-calibrate">位置調整</button>
+            <div class="version-badge">v3.8 (Calib)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
@@ -193,6 +238,13 @@
         let activePenId = null; 
         let pressureThreshold = 0.05;
 
+        // ★キャリブレーション用変数
+        let offset = { x: 0, y: 0 }; // 補正値
+        let calibStep = 0; // 0:左上, 1:右上, 2:右下, 3:左下
+        let calibPoints = []; // 測定値
+        // ターゲット座標（画面の四隅から少し内側）
+        const TARGET_INSET = 50; 
+
         function resizeCanvas() {
             const wrapper = document.getElementById('canvas-wrapper');
             rect = wrapper.getBoundingClientRect();
@@ -209,6 +261,7 @@
             resizeCanvas();
             updateUI();
             setupControls();
+            setupCalibration(); // 新機能
         }
 
         function updateUI() {
@@ -256,8 +309,91 @@
                     }, 3000);
                 }
             });
+            
+            // 調整ボタン
+            document.getElementById('btn-calibrate').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startCalibration();
+            });
         }
 
+        // --- キャリブレーション処理 ---
+        function startCalibration() {
+            document.getElementById('calibration-overlay').style.display = 'flex';
+            calibStep = 0;
+            calibPoints = [];
+            moveCrosshair();
+        }
+
+        function moveCrosshair() {
+            const cross = document.getElementById('calib-cross');
+            const target = document.getElementById('calib-target');
+            const msg = document.getElementById('calib-msg');
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+
+            let tx, ty, text;
+            if (calibStep === 0) { tx = TARGET_INSET; ty = TARGET_INSET; text="左上"; }
+            else if (calibStep === 1) { tx = w - TARGET_INSET; ty = TARGET_INSET; text="右上"; }
+            else if (calibStep === 2) { tx = w - TARGET_INSET; ty = h - TARGET_INSET; text="右下"; }
+            else if (calibStep === 3) { tx = TARGET_INSET; ty = h - TARGET_INSET; text="左下"; }
+
+            // 十字キー移動（中心基準）
+            cross.style.left = (tx - 20) + 'px';
+            cross.style.top = (ty - 20) + 'px';
+            
+            // タッチ判定エリア移動
+            target.style.left = (tx - 30) + 'px';
+            target.style.top = (ty - 30) + 'px';
+            
+            msg.innerText = `${text}の十字の中心を\nペンでタッチしてください`;
+        }
+
+        function setupCalibration() {
+            const target = document.getElementById('calib-target');
+            
+            // タッチイベント（ペンのみ反応させてもいいが、調整なので指も許可する）
+            target.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                
+                // タッチされた座標
+                const tx = touch.clientX;
+                const ty = touch.clientY;
+                
+                // 本来あるべき座標（ターゲットの中心）
+                const rect = target.getBoundingClientRect();
+                const cx = rect.left + rect.width/2;
+                const cy = rect.top + rect.height/2;
+                
+                // ズレ（タッチ位置 - 本来の位置）
+                const dx = tx - cx;
+                const dy = ty - cy;
+                
+                calibPoints.push({dx, dy});
+                
+                calibStep++;
+                if (calibStep < 4) {
+                    moveCrosshair();
+                } else {
+                    finishCalibration();
+                }
+            });
+        }
+
+        function finishCalibration() {
+            // 4点の平均ズレ量を計算
+            let avgX = 0, avgY = 0;
+            calibPoints.forEach(p => { avgX += p.dx; avgY += p.dy; });
+            offset.x = avgX / 4;
+            offset.y = avgY / 4;
+            
+            document.getElementById('calibration-overlay').style.display = 'none';
+            alert(`補正完了\nX: ${offset.x.toFixed(1)}px, Y: ${offset.y.toFixed(1)}px\nペン先の位置をずらして描画します。`);
+        }
+
+
+        // --- 描画関連 ---
         function drawCanvas() {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, rect.width, rect.height);
@@ -283,7 +419,22 @@
             }
         }
 
-        // --- タッチ判定（修正版） ---
+        // --- タッチ判定（補正適用） ---
+        function getTouchPoint(touch) {
+            // ★ここで補正値を適用！
+            // タッチされた場所から、オフセット分だけ逆方向にずらした位置を「インク」とする
+            // 例: ペン先より右に線が出るなら、インクを左にずらす
+            const rawX = touch.clientX - offset.x; 
+            const rawY = touch.clientY - offset.y;
+
+            return {
+                x: +(rawX - rect.left).toFixed(1),
+                y: +(rawY - rect.top).toFixed(1),
+                f: +(touch.force || 0.5).toFixed(3),
+                t: Date.now()
+            };
+        }
+
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
             if (activePenId !== null) return;
@@ -292,15 +443,11 @@
                 const t = e.changedTouches[i];
                 if (t.touchType === 'stylus') {
                     
-                    // ★修正ポイント1: ペンIDは必ず確保する（拒否しない）
                     activePenId = t.identifier;
                     const force = t.force || 0;
                     
-                    // ★修正ポイント2: 筆圧が低い場合、追跡は開始するが「描画」はしない
                     if (force < pressureThreshold) {
                         debugDiv.innerText = `Hovering... (${force.toFixed(2)})`;
-                        // currentStrokeは初期化せず、空のままにしておく
-                        // あるいは座標だけ記録して描画フラグを折るなど
                         return;
                     }
 
@@ -331,19 +478,15 @@
                     const force = t.force || 0;
                     const pt = getTouchPoint(t);
 
-                    // ★修正ポイント3: 途中でも筆圧が低いなら描画スキップ（ホバー中）
                     if (force < pressureThreshold) {
                          debugDiv.innerText = `Hovering... (${force.toFixed(2)})`;
-                         // ここで stroke を切る処理を入れてもいいが、
-                         // 今回は「浮いている間はデータを追加しない」だけにする
                          return;
                     }
                     
-                    // もしstrokeが空（書き始めがホバーだった場合）なら、ここから開始
                     if (currentStroke.length === 0) {
                          currentStroke = [pt];
                          ctx.beginPath();
-                         ctx.moveTo(pt.x, pt.y); // 開始点移動
+                         ctx.moveTo(pt.x, pt.y);
                          return;
                     }
 
@@ -383,15 +526,6 @@
 
         canvas.addEventListener('touchend', handleEnd, { passive: false });
         canvas.addEventListener('touchcancel', handleEnd, { passive: false });
-
-        function getTouchPoint(touch) {
-            return {
-                x: +(touch.clientX - rect.left).toFixed(1),
-                y: +(touch.clientY - rect.top).toFixed(1),
-                f: +(touch.force || 0.5).toFixed(3),
-                t: Date.now()
-            };
-        }
 
         function undoStroke() {
             if (currentStrokes.length > 0) { currentStrokes.pop(); drawCanvas(); }

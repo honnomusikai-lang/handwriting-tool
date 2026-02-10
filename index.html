@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.8</title>
+    <title>文章収集 v3.9</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -41,7 +41,7 @@
         }
         #progress-info { font-size: 0.8rem; color: #888; font-family: sans-serif; }
 
-        /* --- ステータス & 調整ボタン --- */
+        /* --- ステータス --- */
         #status-bar {
             position: absolute; top: 5px; left: 0; width: 100%;
             display: flex; justify-content: space-between; align-items: center; padding: 0 10px;
@@ -55,8 +55,7 @@
             font-size: 0.7rem; color: #f00; font-family: monospace; font-weight: bold;
         }
         .pen-active { color: #00a000 !important; }
-
-        /* キャリブレーションボタン */
+        
         #btn-calibrate {
             font-size: 0.7rem; background: #666; color: #fff; 
             padding: 4px 8px; border-radius: 4px; border: none;
@@ -90,39 +89,23 @@
             height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
         }
 
-        /* --- キャリブレーション用オーバーレイ --- */
+        /* --- キャリブレーション --- */
         #calibration-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.8);
             z-index: 100;
-            display: none; /* 初期状態は非表示 */
+            display: none;
             flex-direction: column;
             justify-content: center; align-items: center;
         }
-        #calib-msg {
-            color: white; font-size: 1.2rem; margin-bottom: 20px; text-align: center;
-            pointer-events: none;
-        }
+        #calib-msg { color: white; font-size: 1.2rem; margin-bottom: 20px; text-align: center; pointer-events: none; }
         .crosshair {
-            position: absolute;
-            width: 40px; height: 40px;
-            border: 2px solid white;
-            border-radius: 50%;
-            pointer-events: none;
+            position: absolute; width: 40px; height: 40px;
+            border: 2px solid white; border-radius: 50%; pointer-events: none;
         }
-        .crosshair::before, .crosshair::after {
-            content: ''; position: absolute; background: white;
-        }
-        .crosshair::before { top: 18px; left: 0; width: 36px; height: 2px; } /* 横棒 */
-        .crosshair::after { top: 0; left: 18px; width: 2px; height: 36px; } /* 縦棒 */
-        
-        /* ターゲットエリア（タッチ判定用） */
-        #calib-target {
-            position: absolute; width: 60px; height: 60px;
-            background: transparent;
-            z-index: 101;
-            /* touch-action: none; JSで制御 */
-        }
+        .crosshair::before { content: ''; position: absolute; top: 18px; left: 0; width: 36px; height: 2px; background: white; }
+        .crosshair::after { content: ''; position: absolute; top: 0; left: 18px; width: 2px; height: 36px; background: white; }
+        #calib-target { position: absolute; width: 60px; height: 60px; background: transparent; z-index: 101; }
 
         /* --- コントロール --- */
         .controls {
@@ -134,7 +117,7 @@
             border-top: 1px solid #ccc;
             z-index: 20;
         }
-        .buttons-row { display: flex; gap: 15px; }
+        .buttons-row { display: flex; gap: 10px; width: 95%; justify-content: center; }
         .slider-container {
             width: 80%; display: flex; align-items: center; gap: 10px;
             font-size: 0.8rem; color: #555;
@@ -142,15 +125,19 @@
         input[type=range] { flex: 1; accent-color: #333; touch-action: manipulation; }
 
         button {
-            padding: 12px 24px; font-size: 0.9rem; border: none;
+            padding: 12px 15px; font-size: 0.9rem; border: none;
             border-radius: 25px; font-weight: bold;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-family: sans-serif;
             touch-action: manipulation; 
             pointer-events: auto; cursor: pointer; transition: all 0.1s;
         }
-        .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; }
-        .btn-clear { background: #ff3b30; color: white; width: 100px; }
-        .btn-next { background: #007aff; color: white; padding: 12px 40px; }
+        
+        .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; flex: 1; }
+        .btn-clear { background: #ff3b30; color: white; flex: 1; }
+        /* 手動保存ボタンを追加 */
+        .btn-save { background: #34c759; color: white; flex: 1; } 
+        .btn-next { background: #007aff; color: white; flex: 1.5; }
+        
         button:active { transform: scale(0.95); opacity: 0.8; }
         .btn-confirm-mode { background: #d00000 !important; animation: pulse 0.5s infinite alternate; }
         @keyframes pulse { from { opacity: 1; } to { opacity: 0.7; } }
@@ -162,13 +149,14 @@
     <div id="calibration-overlay">
         <div id="calib-msg">左上の十字の中心を<br>ペンでタッチしてください</div>
         <div id="calib-cross" class="crosshair"></div>
-        <div id="calib-target"></div> </div>
+        <div id="calib-target"></div>
+    </div>
 
     <div id="target-area">
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
             <button id="btn-calibrate">位置調整</button>
-            <div class="version-badge">v3.8 (Calib)</div>
+            <div class="version-badge">v3.9 (Safe)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
@@ -190,6 +178,7 @@
         <div class="buttons-row">
             <button id="btn-undo" class="btn-undo">戻る</button>
             <button id="btn-clear" class="btn-clear">クリア</button>
+            <button id="btn-save" class="btn-save">保存</button>
             <button id="btn-next" class="btn-next">次へ</button>
         </div>
     </div>
@@ -225,10 +214,9 @@
         ];
 
         let currentIndex = 0;
-        let sentenceData = [];
+        let sentenceData = []; // 全データをここに蓄積し続ける
         let currentStrokes = [];
         let currentStroke = [];
-        let pageNumber = 1;
 
         const canvas = document.getElementById('main-canvas');
         const ctx = canvas.getContext('2d', { alpha: false });
@@ -238,11 +226,9 @@
         let activePenId = null; 
         let pressureThreshold = 0.05;
 
-        // ★キャリブレーション用変数
-        let offset = { x: 0, y: 0 }; // 補正値
-        let calibStep = 0; // 0:左上, 1:右上, 2:右下, 3:左下
-        let calibPoints = []; // 測定値
-        // ターゲット座標（画面の四隅から少し内側）
+        let offset = { x: 0, y: 0 };
+        let calibStep = 0;
+        let calibPoints = [];
         const TARGET_INSET = 50; 
 
         function resizeCanvas() {
@@ -261,7 +247,7 @@
             resizeCanvas();
             updateUI();
             setupControls();
-            setupCalibration(); // 新機能
+            setupCalibration();
         }
 
         function updateUI() {
@@ -287,7 +273,18 @@
             });
 
             document.getElementById('btn-next').addEventListener('touchstart', (e) => {
-                e.preventDefault(); saveAndNext();
+                e.preventDefault(); goNext();
+            });
+            
+            // 手動保存ボタン
+            document.getElementById('btn-save').addEventListener('touchstart', (e) => {
+                e.preventDefault(); 
+                // 現在のストロークがあれば一時保存してからダウンロード
+                if (currentStrokes.length > 0) {
+                     alert("書きかけのデータがあります。「次へ」を押して確定してから保存してください。");
+                } else {
+                     downloadJSON();
+                }
             });
 
             const clearBtn = document.getElementById('btn-clear');
@@ -310,14 +307,12 @@
                 }
             });
             
-            // 調整ボタン
             document.getElementById('btn-calibrate').addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 startCalibration();
             });
         }
 
-        // --- キャリブレーション処理 ---
         function startCalibration() {
             document.getElementById('calibration-overlay').style.display = 'flex';
             calibStep = 0;
@@ -338,62 +333,40 @@
             else if (calibStep === 2) { tx = w - TARGET_INSET; ty = h - TARGET_INSET; text="右下"; }
             else if (calibStep === 3) { tx = TARGET_INSET; ty = h - TARGET_INSET; text="左下"; }
 
-            // 十字キー移動（中心基準）
             cross.style.left = (tx - 20) + 'px';
             cross.style.top = (ty - 20) + 'px';
-            
-            // タッチ判定エリア移動
             target.style.left = (tx - 30) + 'px';
             target.style.top = (ty - 30) + 'px';
-            
             msg.innerText = `${text}の十字の中心を\nペンでタッチしてください`;
         }
 
         function setupCalibration() {
             const target = document.getElementById('calib-target');
-            
-            // タッチイベント（ペンのみ反応させてもいいが、調整なので指も許可する）
             target.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 const touch = e.touches[0];
-                
-                // タッチされた座標
                 const tx = touch.clientX;
                 const ty = touch.clientY;
-                
-                // 本来あるべき座標（ターゲットの中心）
                 const rect = target.getBoundingClientRect();
                 const cx = rect.left + rect.width/2;
                 const cy = rect.top + rect.height/2;
-                
-                // ズレ（タッチ位置 - 本来の位置）
                 const dx = tx - cx;
                 const dy = ty - cy;
-                
                 calibPoints.push({dx, dy});
-                
                 calibStep++;
-                if (calibStep < 4) {
-                    moveCrosshair();
-                } else {
-                    finishCalibration();
-                }
+                if (calibStep < 4) { moveCrosshair(); } else { finishCalibration(); }
             });
         }
 
         function finishCalibration() {
-            // 4点の平均ズレ量を計算
             let avgX = 0, avgY = 0;
             calibPoints.forEach(p => { avgX += p.dx; avgY += p.dy; });
             offset.x = avgX / 4;
             offset.y = avgY / 4;
-            
             document.getElementById('calibration-overlay').style.display = 'none';
-            alert(`補正完了\nX: ${offset.x.toFixed(1)}px, Y: ${offset.y.toFixed(1)}px\nペン先の位置をずらして描画します。`);
+            alert(`補正完了\nX: ${offset.x.toFixed(1)}px, Y: ${offset.y.toFixed(1)}px`);
         }
 
-
-        // --- 描画関連 ---
         function drawCanvas() {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, rect.width, rect.height);
@@ -419,14 +392,9 @@
             }
         }
 
-        // --- タッチ判定（補正適用） ---
         function getTouchPoint(touch) {
-            // ★ここで補正値を適用！
-            // タッチされた場所から、オフセット分だけ逆方向にずらした位置を「インク」とする
-            // 例: ペン先より右に線が出るなら、インクを左にずらす
             const rawX = touch.clientX - offset.x; 
             const rawY = touch.clientY - offset.y;
-
             return {
                 x: +(rawX - rect.left).toFixed(1),
                 y: +(rawY - rect.top).toFixed(1),
@@ -438,30 +406,23 @@
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
             if (activePenId !== null) return;
-
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 if (t.touchType === 'stylus') {
-                    
                     activePenId = t.identifier;
                     const force = t.force || 0;
-                    
                     if (force < pressureThreshold) {
                         debugDiv.innerText = `Hovering... (${force.toFixed(2)})`;
                         return;
                     }
-
                     debugDiv.innerText = `Writing (${force.toFixed(2)})`;
                     debugDiv.className = "pen-active";
-                    
                     const pt = getTouchPoint(t);
                     currentStroke = [pt];
-                    
                     ctx.beginPath();
                     ctx.arc(pt.x, pt.y, (pt.f * 1.5 + 1.0)/2, 0, Math.PI * 2);
                     ctx.fillStyle = '#000';
                     ctx.fill();
-                    
                     break;
                 }
             }
@@ -470,29 +431,23 @@
         canvas.addEventListener('touchmove', e => {
             if (activePenId === null) return;
             e.preventDefault();
-
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const t = e.changedTouches[i];
                 if (t.identifier === activePenId) {
-                    
                     const force = t.force || 0;
                     const pt = getTouchPoint(t);
-
                     if (force < pressureThreshold) {
                          debugDiv.innerText = `Hovering... (${force.toFixed(2)})`;
                          return;
                     }
-                    
                     if (currentStroke.length === 0) {
                          currentStroke = [pt];
                          ctx.beginPath();
                          ctx.moveTo(pt.x, pt.y);
                          return;
                     }
-
                     currentStroke.push(pt);
                     debugDiv.innerText = `Writing (${force.toFixed(2)})`;
-
                     const prev = currentStroke[currentStroke.length - 2];
                     if (prev) {
                         ctx.beginPath();
@@ -530,36 +485,45 @@
         function undoStroke() {
             if (currentStrokes.length > 0) { currentStrokes.pop(); drawCanvas(); }
         }
-        function saveAndNext() {
+
+        // --- 保存・次へロジック ---
+        function goNext() {
             if (currentStrokes.length === 0) { alert("まだ何も書いていません"); return; }
+            
+            // ★累積保存：既存の配列に追加し続ける
             sentenceData.push({
                 text: SENTENCE_LIST[currentIndex],
                 strokes: JSON.parse(JSON.stringify(currentStrokes)),
                 timestamp: new Date().toISOString()
             });
+
+            // 5行ごとに自動バックアップ
             if ((currentIndex + 1) % 5 === 0 || currentIndex === SENTENCE_LIST.length - 1) {
                 downloadJSON();
-                sentenceData = [];
             }
+
             currentIndex++;
             currentStrokes = [];
             drawCanvas();
             updateUI();
         }
+
         function downloadJSON() {
+            // ファイル名には「ここまで書いた行数」を入れる
+            const count = sentenceData.length;
             const jsonString = JSON.stringify({
-                metadata: { type: "sentence", author: "User", date: new Date().toISOString() },
-                data: sentenceData
+                metadata: { type: "sentence_cumulative", author: "User", date: new Date().toISOString() },
+                data: sentenceData // ★ここには過去分もすべて入っている
             });
             const blob = new Blob([jsonString], {type: "application/json"});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `handwriting_sentences_${String(pageNumber).padStart(3, '0')}.json`;
+            // ファイル名をわかりやすく
+            a.download = `handwriting_data_1-${count}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            pageNumber++;
         }
 
         window.addEventListener('load', initApp);

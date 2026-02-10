@@ -3,72 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>ストローク仕分け機 v1.2</title>
+    <title>ストローク仕分け機 v2.0</title>
     <style>
-        /* 全体のタッチ挙動を制限 */
         body { 
-            font-family: sans-serif; 
-            display: flex; flex-direction: column; align-items: center; 
-            background: #f0f0f0; 
-            margin: 0; padding: 10px; 
-            height: 100vh; height: 100dvh; /* iOS対応 */
-            box-sizing: border-box; 
-            touch-action: none; /* ブラウザ標準のパン・ズームを禁止 */
-            overflow: hidden; /* スクロール禁止 */
+            font-family: sans-serif; display: flex; flex-direction: column; align-items: center; 
+            background: #f0f0f0; margin: 0; padding: 10px; 
+            height: 100vh; height: 100dvh; 
+            box-sizing: border-box; touch-action: none; overflow: hidden; 
         }
         
-        h1 { margin: 0 0 10px 0; font-size: 1rem; color: #555; pointer-events: none; }
+        h1 { margin: 0 0 5px 0; font-size: 0.9rem; color: #888; pointer-events: none; }
         
-        #file-area { margin-bottom: 20px; text-align: center; }
-        input[type=file] { font-size: 1rem; }
+        #file-area { margin-bottom: 10px; text-align: center; }
+        input[type=file] { font-size: 0.9rem; }
         
-        #work-area { 
-            display: none; flex-direction: column; align-items: center; width: 100%; height: 100%;
-        }
+        #work-area { display: none; flex-direction: column; align-items: center; width: 100%; height: 100%; }
 
         #status-panel {
-            background: white; padding: 10px; border-radius: 8px; 
+            background: white; padding: 8px 15px; border-radius: 8px; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px;
             text-align: center; width: 100%; max-width: 600px;
-            flex: 0 0 auto;
-            pointer-events: none; /* 誤操作防止 */
+            flex: 0 0 auto; pointer-events: none;
         }
         
-        #target-char { font-size: 3rem; font-weight: bold; color: #e00; line-height: 1; margin: 5px 0; }
-        #target-context { font-size: 1rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #target-char { font-size: 2.5rem; font-weight: bold; color: #e00; line-height: 1; margin: 0; }
+        #target-context { font-size: 0.9rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         #canvas-wrapper {
-            flex: 1;
-            width: 100%; max-width: 800px;
-            position: relative;
-            background: #fff;
+            flex: 1; width: 100%; max-width: 800px;
+            position: relative; background: #fff;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            margin-bottom: 10px;
-            border-radius: 4px;
+            margin-bottom: 10px; border-radius: 4px;
             overflow: hidden;
         }
         
-        canvas { display: block; width: 100%; height: 100%; cursor: pointer; touch-action: none; }
+        canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 
-        .controls { display: flex; gap: 10px; width: 100%; max-width: 600px; justify-content: center; flex: 0 0 auto; padding-bottom: 20px; }
+        .controls { 
+            display: flex; flex-wrap: wrap; gap: 10px; width: 100%; max-width: 600px; 
+            justify-content: center; flex: 0 0 auto; padding-bottom: 10px; 
+        }
+        
         button {
-            padding: 15px 0; width: 100%; font-size: 1rem; border: none; border-radius: 8px;
+            padding: 12px 0; font-size: 1rem; border: none; border-radius: 8px;
             font-weight: bold; cursor: pointer; color: white;
-            touch-action: manipulation;
-            pointer-events: auto;
+            touch-action: manipulation; pointer-events: auto;
         }
         .btn-back { background: #888; flex: 1; }
         .btn-next { background: #007aff; flex: 2; }
         .btn-save { background: #34c759; display: none; width: 100%; }
+        
+        /* 投げ縄ボタン */
+        #btn-lasso { 
+            width: 100%; background: #555; 
+            display: flex; justify-content: center; align-items: center; gap: 5px;
+        }
+        #btn-lasso.active { background: #ff9500; color: #fff; } /* ONのときはオレンジ */
 
     </style>
 </head>
 <body>
 
-    <h1>ストローク仕分け機 v1.2</h1>
+    <h1>ストローク仕分け機 v2.0 (Lasso)</h1>
     
     <div id="file-area">
-        <p>iPadのデータを選択してください</p>
         <input type="file" id="file-input" accept=".json">
     </div>
 
@@ -76,7 +74,6 @@
         <div id="status-panel">
             <div id="target-context">読み込み中...</div>
             <div id="target-char">?</div>
-            <div style="font-size: 0.8rem; color:#666;">この文字の線をすべてタップ</div>
         </div>
 
         <div id="canvas-wrapper">
@@ -84,22 +81,20 @@
         </div>
 
         <div class="controls">
-            <button class="btn-back" onclick="prevChar()">戻る</button>
-            <button class="btn-next" onclick="confirmAndNext()">確定して次へ</button>
+            <button id="btn-lasso" onclick="toggleLasso()">投げ縄: OFF</button>
+            <div style="display:flex; width:100%; gap:10px;">
+                <button class="btn-back" onclick="prevChar()">戻る</button>
+                <button class="btn-next" onclick="confirmAndNext()">確定して次へ</button>
+            </div>
             <button class="btn-save" onclick="saveData()">保存して終了</button>
         </div>
     </div>
 
     <script>
-        // --- ズーム禁止の魔法 (ここが重要) ---
-        document.addEventListener('gesturestart', function(e) {
-            e.preventDefault(); // ピンチズーム禁止
-        });
-        document.addEventListener('dblclick', function(e) {
-            e.preventDefault(); // ダブルタップ禁止
-        }, { passive: false });
+        // ズーム禁止
+        document.addEventListener('gesturestart', e => e.preventDefault());
+        document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
         
-        // --- 以下ロジック ---
         let rawData = [];
         let labeledData = {}; 
         
@@ -116,6 +111,12 @@
         let offsetX = 0;
         let offsetY = 0;
 
+        // 投げ縄用変数
+        let isLassoMode = false;
+        let isDragging = false;
+        let lassoPath = []; // [{x, y}, ...]
+
+        // --- ファイル読み込み ---
         document.getElementById('file-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -144,171 +145,230 @@
             const line = rawData[index];
             strokesInLine = line.strokes;
             strokeAssignments = new Array(strokesInLine.length).fill(-1);
-            
-            setTimeout(() => {
-                resizeCanvas();
-                updateUI();
-            }, 100);
+            setTimeout(() => { resizeCanvas(); updateUI(); }, 100);
         }
 
         function resizeCanvas() {
             if (strokesInLine.length === 0) return;
-
             const wrapRect = wrapper.getBoundingClientRect();
-            // Retina対応（ぼやけ防止）
             const dpr = window.devicePixelRatio || 1;
             canvas.width = wrapRect.width * dpr;
             canvas.height = wrapRect.height * dpr;
             canvas.style.width = wrapRect.width + "px";
             canvas.style.height = wrapRect.height + "px";
-            
             ctx.scale(dpr, dpr);
 
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             strokesInLine.forEach(s => s.forEach(p => {
-                if(p.x < minX) minX = p.x;
-                if(p.x > maxX) maxX = p.x;
-                if(p.y < minY) minY = p.y;
-                if(p.y > maxY) maxY = p.y;
+                if(p.x < minX) minX = p.x; if(p.x > maxX) maxX = p.x;
+                if(p.y < minY) minY = p.y; if(p.y > maxY) maxY = p.y;
             }));
             
             const padding = 40;
             const contentW = maxX - minX;
             const contentH = maxY - minY;
-            
-            // ラッパーの大きさ基準でスケール計算
             const scaleX = (wrapRect.width - padding * 2) / contentW;
             const scaleY = (wrapRect.height - padding * 2) / contentH;
             scale = Math.min(scaleX, scaleY, 2.0); 
             
-            const contentCenterX = minX + contentW / 2;
-            const contentCenterY = minY + contentH / 2;
-            
-            // 描画用のオフセット
-            offsetX = (wrapRect.width / 2) / scale - contentCenterX;
-            offsetY = (wrapRect.height / 2) / scale - contentCenterY;
-            
+            offsetX = (wrapRect.width / 2) / scale - (minX + contentW / 2);
+            offsetY = (wrapRect.height / 2) / scale - (minY + contentH / 2);
             draw();
         }
 
         function updateUI() {
             const line = rawData[currentLineIndex];
             const text = line.text;
-            
             if (currentCharIndex >= text.length) {
                 currentLineIndex++;
                 currentCharIndex = 0;
                 loadLine(currentLineIndex);
                 return;
             }
-
             const char = text[currentCharIndex];
-            if (char === ' ' || char === '　') {
-                currentCharIndex++;
-                updateUI();
-                return;
-            }
+            if (char === ' ' || char === '　') { currentCharIndex++; updateUI(); return; }
 
             document.getElementById('target-char').innerText = char;
-            
             const pre = text.substring(0, currentCharIndex);
             const post = text.substring(currentCharIndex + 1);
             document.getElementById('target-context').innerHTML = 
                 `<span style="color:#ccc">${pre}</span> <b>${char}</b> <span style="color:#ccc">${post}</span>`;
-                
             draw();
         }
 
         function draw() {
             const wrapRect = wrapper.getBoundingClientRect();
-            const dpr = window.devicePixelRatio || 1;
             ctx.clearRect(0, 0, wrapRect.width, wrapRect.height);
-            
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
+            // ストローク描画
             strokesInLine.forEach((stroke, i) => {
                 const assigned = strokeAssignments[i];
-                
                 ctx.beginPath();
                 const start = stroke[0];
                 ctx.moveTo((start.x + offsetX) * scale, (start.y + offsetY) * scale);
-                
                 for (let j = 1; j < stroke.length; j++) {
                     const p = stroke[j];
                     ctx.lineTo((p.x + offsetX) * scale, (p.y + offsetY) * scale);
                 }
 
                 if (assigned === currentCharIndex) {
-                    ctx.strokeStyle = '#ff0000'; 
-                    ctx.lineWidth = 4;
-                    ctx.globalAlpha = 1.0;
+                    ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 4; ctx.globalAlpha = 1.0;
                 } else if (assigned !== -1 && assigned < currentCharIndex) {
-                    ctx.strokeStyle = '#00cc00'; 
-                    ctx.lineWidth = 2;
-                    ctx.globalAlpha = 0.2;
+                    ctx.strokeStyle = '#00cc00'; ctx.lineWidth = 2; ctx.globalAlpha = 0.2;
                 } else {
-                    ctx.strokeStyle = '#000000'; 
-                    ctx.lineWidth = 2;
-                    ctx.globalAlpha = 1.0;
+                    ctx.strokeStyle = '#000000'; ctx.lineWidth = 2; ctx.globalAlpha = 1.0;
                 }
-                
                 ctx.stroke();
             });
+
+            // 投げ縄の軌跡描画
+            if (isDragging && lassoPath.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(lassoPath[0].x, lassoPath[0].y);
+                for(let i=1; i<lassoPath.length; i++){
+                    ctx.lineTo(lassoPath[i].x, lassoPath[i].y);
+                }
+                ctx.strokeStyle = 'rgba(0, 122, 255, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]); // 点線
+                ctx.stroke();
+                ctx.setLineDash([]); // リセット
+                
+                // 囲み領域の塗りつぶし（薄く）
+                ctx.fillStyle = 'rgba(0, 122, 255, 0.1)';
+                ctx.fill();
+            }
             ctx.globalAlpha = 1.0;
         }
 
-        // --- 操作 ---
+        // --- 投げ縄ロジック ---
+        function toggleLasso() {
+            isLassoMode = !isLassoMode;
+            const btn = document.getElementById('btn-lasso');
+            if (isLassoMode) {
+                btn.classList.add('active');
+                btn.innerText = "投げ縄: ON";
+            } else {
+                btn.classList.remove('active');
+                btn.innerText = "投げ縄: OFF";
+            }
+        }
+
+        // 点が多角形の内側にあるか判定 (Ray Casting Algorithm)
+        function isPointInPolygon(point, polygon) {
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i].x, yi = polygon[i].y;
+                const xj = polygon[j].x, yj = polygon[j].y;
+                const intersect = ((yi > point.y) != (yj > point.y)) &&
+                    (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        // --- タッチ操作 ---
         canvas.addEventListener('pointerdown', function(e) {
-            e.preventDefault(); 
-            // 座標計算の修正（スケールとオフセットを考慮）
+            e.preventDefault();
             const rect = canvas.getBoundingClientRect();
-            // touchイベントの座標補正
-            const clickX = e.clientX - rect.left;
-            const clickY = e.clientY - rect.top;
-            
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+
+            if (isLassoMode) {
+                // 投げ縄開始
+                isDragging = true;
+                lassoPath = [{x: px, y: py}];
+            } else {
+                // 通常タップ選択
+                handleTapSelect(px, py);
+            }
+        });
+
+        canvas.addEventListener('pointermove', function(e) {
+            e.preventDefault();
+            if (isLassoMode && isDragging) {
+                const rect = canvas.getBoundingClientRect();
+                lassoPath.push({
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                });
+                draw(); // 軌跡を描画
+            }
+        });
+
+        canvas.addEventListener('pointerup', function(e) {
+            e.preventDefault();
+            if (isLassoMode && isDragging) {
+                isDragging = false;
+                handleLassoSelect(); // 判定実行
+                lassoPath = [];
+                draw();
+            }
+        });
+
+        function handleTapSelect(clickX, clickY) {
             let minDist = Infinity;
             let targetIdx = -1;
             
             strokesInLine.forEach((stroke, i) => {
                 if (strokeAssignments[i] !== -1 && strokeAssignments[i] < currentCharIndex) return;
-
                 for (let p of stroke) {
-                    // 描画座標を再現
                     const sx = (p.x + offsetX) * scale;
                     const sy = (p.y + offsetY) * scale;
-                    
                     const dist = Math.hypot(sx - clickX, sy - clickY);
-                    
-                    if (dist < minDist) {
-                        minDist = dist;
-                        targetIdx = i;
-                    }
+                    if (dist < minDist) { minDist = dist; targetIdx = i; }
                 }
             });
 
-            // 判定距離（画面上のピクセルで40px以内）
             if (minDist < 40 && targetIdx !== -1) {
-                if (strokeAssignments[targetIdx] === currentCharIndex) {
-                    strokeAssignments[targetIdx] = -1; 
-                } else {
-                    strokeAssignments[targetIdx] = currentCharIndex;
-                }
+                toggleAssignment(targetIdx);
                 draw();
             }
-        });
+        }
+
+        function handleLassoSelect() {
+            // 全ストロークに対して、投げ縄に含まれるか判定
+            strokesInLine.forEach((stroke, i) => {
+                // 確定済みは除外
+                if (strokeAssignments[i] !== -1 && strokeAssignments[i] < currentCharIndex) return;
+
+                // ストローク内の「いずれかの点」が投げ縄に入っていれば選択とみなす
+                let isInside = false;
+                
+                // 計算量を減らすため、始点・中点・終点くらいをチェックすれば十分
+                // ここでは全点をチェックしてもPC/iPadなら余裕
+                for (let p of stroke) {
+                    // 画面座標に変換
+                    const sx = (p.x + offsetX) * scale;
+                    const sy = (p.y + offsetY) * scale;
+                    
+                    if (isPointInPolygon({x: sx, y: sy}, lassoPath)) {
+                        isInside = true;
+                        break;
+                    }
+                }
+
+                if (isInside) {
+                    toggleAssignment(i);
+                }
+            });
+        }
+
+        function toggleAssignment(index) {
+            if (strokeAssignments[index] === currentCharIndex) {
+                strokeAssignments[index] = -1; // 解除
+            } else {
+                strokeAssignments[index] = currentCharIndex; // 選択
+            }
+        }
 
         function confirmAndNext() {
             const char = rawData[currentLineIndex].text[currentCharIndex];
             const selectedStrokes = [];
             strokesInLine.forEach((s, i) => {
-                if (strokeAssignments[i] === currentCharIndex) {
-                    // 保存時に座標を正規化（文字の中心を0,0にする）しておくと便利
-                    // ここでは後でPython処理するためにそのまま保存
-                    selectedStrokes.push(s); 
-                }
+                if (strokeAssignments[i] === currentCharIndex) selectedStrokes.push(s); 
             });
-
             if (selectedStrokes.length > 0) {
                 if (!labeledData[char]) labeledData[char] = [];
                 labeledData[char].push(selectedStrokes);
@@ -318,14 +378,8 @@
         }
 
         function prevChar() {
-            if (currentCharIndex > 0) {
-                currentCharIndex--;
-                // 戻ったときに、その文字に割り当てていた選択を解除するならここ
-                // strokeAssignments.forEach((v,i) => { if(v === currentCharIndex) strokeAssignments[i] = -1; });
-                updateUI();
-            } else {
-                alert("これ以上戻れません");
-            }
+            if (currentCharIndex > 0) { currentCharIndex--; updateUI(); }
+            else { alert("これ以上戻れません"); }
         }
 
         function finishAll() {
@@ -333,6 +387,7 @@
             document.querySelector('.btn-back').style.display = 'none';
             document.querySelector('.btn-next').style.display = 'none';
             document.querySelector('.btn-save').style.display = 'block';
+            document.getElementById('btn-lasso').style.display = 'none';
             ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
@@ -348,9 +403,7 @@
             document.body.removeChild(a);
         }
         
-        window.addEventListener('resize', () => {
-            setTimeout(resizeCanvas, 200);
-        });
+        window.addEventListener('resize', () => { setTimeout(resizeCanvas, 200); });
 
     </script>
 </body>

@@ -3,110 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ストローク仕分け機</title>
+    <title>ストローク仕分け機 v1.1</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; margin: 0; padding: 20px; height: 100vh; box-sizing: border-box; }
-        h1 { margin: 0 0 10px 0; font-size: 1.2rem; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; margin: 0; padding: 10px; height: 100vh; box-sizing: border-box; touch-action: none; }
         
-        #file-area { margin-bottom: 10px; }
+        h1 { margin: 0 0 10px 0; font-size: 1rem; color: #555; }
+        
+        #file-area { margin-bottom: 20px; text-align: center; }
+        input[type=file] { font-size: 1rem; }
         
         #work-area { 
-            display: none; flex-direction: column; align-items: center; width: 100%; flex: 1;
+            display: none; flex-direction: column; align-items: center; width: 100%; height: 100%;
         }
 
         #status-panel {
-            background: white; padding: 10px 20px; border-radius: 8px; 
+            background: white; padding: 10px; border-radius: 8px; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px;
             text-align: center; width: 100%; max-width: 600px;
+            flex: 0 0 auto; /* 高さを固定 */
         }
         
-        #target-char { font-size: 3rem; font-weight: bold; color: #e00; line-height: 1.2; }
-        #target-context { font-size: 1rem; color: #888; }
+        #target-char { font-size: 3rem; font-weight: bold; color: #e00; line-height: 1; margin: 5px 0; }
+        #target-context { font-size: 1rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
-        #canvas-container {
+        #canvas-wrapper {
+            flex: 1; /* 残りの高さを埋める */
+            width: 100%; max-width: 800px;
             position: relative;
+            background: #fff;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            background: white;
             margin-bottom: 10px;
+            border-radius: 4px;
             overflow: hidden;
-            touch-action: none; /* 重要 */
         }
         
-        canvas { display: block; cursor: pointer; }
+        canvas { display: block; width: 100%; height: 100%; cursor: pointer; }
 
-        .controls { display: flex; gap: 20px; width: 100%; max-width: 600px; justify-content: center; }
+        .controls { display: flex; gap: 10px; width: 100%; max-width: 600px; justify-content: center; flex: 0 0 auto; padding-bottom: 10px; }
         button {
-            padding: 15px 30px; font-size: 1rem; border: none; border-radius: 8px;
+            padding: 15px 0; width: 100%; font-size: 1rem; border: none; border-radius: 8px;
             font-weight: bold; cursor: pointer; color: white;
+            touch-action: manipulation;
         }
-        .btn-back { background: #888; }
-        .btn-next { background: #007aff; flex: 1; }
-        .btn-save { background: #34c759; display: none; }
+        .btn-back { background: #888; flex: 1; }
+        .btn-next { background: #007aff; flex: 2; }
+        .btn-save { background: #34c759; display: none; width: 100%; }
 
-        .highlight { background: #ffcccc; }
     </style>
 </head>
 <body>
 
-    <h1>ストローク仕分け機</h1>
+    <h1>ストローク仕分け機 v1.1</h1>
     
     <div id="file-area">
+        <p>iPadのデータを選択してください</p>
         <input type="file" id="file-input" accept=".json">
-        <p style="font-size:0.8rem">※iPadで集めたJSONファイルを選択してください</p>
     </div>
 
     <div id="work-area">
         <div id="status-panel">
             <div id="target-context">読み込み中...</div>
             <div id="target-char">?</div>
-            <div style="font-size: 0.8rem; margin-top:5px;">この文字の線をすべてタップしてください</div>
+            <div style="font-size: 0.8rem; color:#666;">この文字の線をすべてタップ</div>
         </div>
 
-        <div id="canvas-container">
+        <div id="canvas-wrapper">
             <canvas id="main-canvas"></canvas>
         </div>
 
         <div class="controls">
-            <button class="btn-back" onclick="prevChar()">＜ 戻る</button>
-            <button class="btn-next" onclick="confirmAndNext()">確定して次へ ＞</button>
-            <button class="btn-save" onclick="saveData()">保存する</button>
+            <button class="btn-back" onclick="prevChar()">戻る</button>
+            <button class="btn-next" onclick="confirmAndNext()">確定して次へ</button>
+            <button class="btn-save" onclick="saveData()">保存して終了</button>
         </div>
     </div>
 
     <script>
         let rawData = [];
-        let labeledData = {}; // { "あ": [ [stroke...], [stroke...] ] }
+        let labeledData = {}; 
         
-        // 作業状態
         let currentLineIndex = 0;
         let currentCharIndex = 0;
-        let strokesInLine = []; // その行の全ストローク
-        let strokeAssignments = []; // ストロークごとの所属文字インデックス (-1は未割り当て)
+        let strokesInLine = [];
+        let strokeAssignments = []; 
         
-        // Canvas設定
         const canvas = document.getElementById('main-canvas');
         const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('canvas-wrapper');
+        
         let scale = 1;
         let offsetX = 0;
+        let offsetY = 0; // 追加: Y軸補正用
 
         // --- ファイル読み込み ---
         document.getElementById('file-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
-            
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
                     const json = JSON.parse(e.target.result);
-                    // v3.9の形式に対応
                     rawData = json.data ? json.data : (Array.isArray(json) ? json : []);
-                    
                     if (rawData.length === 0) { alert("データが空です"); return; }
-                    
                     startLabeling();
-                } catch (err) {
-                    alert("読み込みエラー: " + err);
-                }
+                } catch (err) { alert("エラー: " + err); }
             };
             reader.readAsText(file);
         });
@@ -114,32 +114,35 @@
         function startLabeling() {
             document.getElementById('file-area').style.display = 'none';
             document.getElementById('work-area').style.display = 'flex';
-            
             currentLineIndex = 0;
             currentCharIndex = 0;
             loadLine(0);
         }
 
         function loadLine(index) {
-            if (index >= rawData.length) {
-                finishAll();
-                return;
-            }
-            
+            if (index >= rawData.length) { finishAll(); return; }
             const line = rawData[index];
-            // スペースは飛ばす処理を入れてもいいが、今回はそのまま表示してスキップさせる
             strokesInLine = line.strokes;
-            
-            // ストロークの所属をリセット (-1:未割り当て)
             strokeAssignments = new Array(strokesInLine.length).fill(-1);
             
-            // Canvasサイズ調整
-            resizeCanvas();
-            updateUI();
+            // レイアウト再計算（ここが重要）
+            // 少し遅延させて、DOMのサイズが確定してから計算する
+            setTimeout(() => {
+                resizeCanvas();
+                updateUI();
+            }, 100);
         }
 
+        // --- 修正されたキャンバスリサイズ ---
         function resizeCanvas() {
-            // ストロークの範囲を計算
+            if (strokesInLine.length === 0) return;
+
+            // ラッパーのサイズを取得
+            const wrapRect = wrapper.getBoundingClientRect();
+            canvas.width = wrapRect.width;
+            canvas.height = wrapRect.height;
+
+            // ストローク全体の範囲を計算
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             strokesInLine.forEach(s => s.forEach(p => {
                 if(p.x < minX) minX = p.x;
@@ -148,20 +151,23 @@
                 if(p.y > maxY) maxY = p.y;
             }));
             
-            // 余白
-            const padding = 50;
-            const contentW = maxX - minX + padding * 2;
-            const contentH = maxY - minY + padding * 2;
+            // 余白（上下左右）
+            const padding = 40;
+            const contentW = maxX - minX;
+            const contentH = maxY - minY;
             
-            // 画面幅に合わせる
-            const screenW = Math.min(window.innerWidth - 40, 800);
-            scale = screenW / contentW;
+            // スケール計算（幅と高さ、どちらに合わせて縮小するか）
+            const scaleX = (canvas.width - padding * 2) / contentW;
+            const scaleY = (canvas.height - padding * 2) / contentH;
+            scale = Math.min(scaleX, scaleY, 1.5); // 拡大しすぎ防止
             
-            canvas.width = screenW;
-            canvas.height = contentH * scale;
+            // オフセット計算（中央寄せ）
+            // コンテンツの中心を、キャンバスの中心に合わせる
+            const contentCenterX = minX + contentW / 2;
+            const contentCenterY = minY + contentH / 2;
             
-            // 描画オフセット
-            offsetX = -minX + padding;
+            offsetX = (canvas.width / 2) / scale - contentCenterX;
+            offsetY = (canvas.height / 2) / scale - contentCenterY;
             
             draw();
         }
@@ -171,7 +177,6 @@
             const text = line.text;
             
             if (currentCharIndex >= text.length) {
-                // 行終了 -> 次の行へ
                 currentLineIndex++;
                 currentCharIndex = 0;
                 loadLine(currentLineIndex);
@@ -179,8 +184,6 @@
             }
 
             const char = text[currentCharIndex];
-            
-            // スペースの場合は自動スキップ
             if (char === ' ' || char === '　') {
                 currentCharIndex++;
                 updateUI();
@@ -189,7 +192,6 @@
 
             document.getElementById('target-char').innerText = char;
             
-            // 文脈表示 (前後を表示)
             const pre = text.substring(0, currentCharIndex);
             const post = text.substring(currentCharIndex + 1);
             document.getElementById('target-context').innerHTML = 
@@ -198,7 +200,6 @@
             draw();
         }
 
-        // --- 描画 ---
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.lineCap = 'round';
@@ -208,29 +209,27 @@
                 const assigned = strokeAssignments[i];
                 
                 ctx.beginPath();
-                // 座標変換
+                
+                // ★修正: XもYもオフセットしてスケーリング
                 const start = stroke[0];
-                ctx.moveTo((start.x + offsetX) * scale, start.y * scale);
+                ctx.moveTo((start.x + offsetX) * scale, (start.y + offsetY) * scale);
                 
                 for (let j = 1; j < stroke.length; j++) {
                     const p = stroke[j];
-                    ctx.lineTo((p.x + offsetX) * scale, p.y * scale);
+                    ctx.lineTo((p.x + offsetX) * scale, (p.y + offsetY) * scale);
                 }
 
                 // 色分け
                 if (assigned === currentCharIndex) {
-                    // 現在選択中のストローク (赤・太い)
-                    ctx.strokeStyle = '#ff0000';
-                    ctx.lineWidth = 4 * scale;
+                    ctx.strokeStyle = '#ff0000'; // 選択中（赤）
+                    ctx.lineWidth = 5 * scale;   // 太く
                     ctx.globalAlpha = 1.0;
                 } else if (assigned !== -1 && assigned < currentCharIndex) {
-                    // 確定済みのストローク (緑・薄い)
-                    ctx.strokeStyle = '#00aa00';
+                    ctx.strokeStyle = '#00cc00'; // 確定済み（緑）
                     ctx.lineWidth = 2 * scale;
-                    ctx.globalAlpha = 0.3;
+                    ctx.globalAlpha = 0.2;       // 薄くして邪魔にならないように
                 } else {
-                    // 未割り当て (黒)
-                    ctx.strokeStyle = '#000000';
+                    ctx.strokeStyle = '#000000'; // 未選択（黒）
                     ctx.lineWidth = 2 * scale;
                     ctx.globalAlpha = 1.0;
                 }
@@ -241,24 +240,24 @@
         }
 
         // --- 操作 ---
-        // タッチ判定
         canvas.addEventListener('pointerdown', function(e) {
+            e.preventDefault(); // スクロール防止
             const rect = canvas.getBoundingClientRect();
-            const clickX = (e.clientX - rect.left);
-            const clickY = (e.clientY - rect.top);
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
             
-            // クリック位置に最も近いストロークを探す
             let minDist = Infinity;
             let targetIdx = -1;
             
             strokesInLine.forEach((stroke, i) => {
-                // すでに他の文字に確定しているものは除外（修正したい場合は戻るボタンで）
-                if (strokeAssignments[i] !== -1 && strokeAssignments[i] !== currentCharIndex) return;
+                // 確定済み（過去の文字）は触れないようにする
+                if (strokeAssignments[i] !== -1 && strokeAssignments[i] < currentCharIndex) return;
 
-                // ストローク内の各点との距離を測る
+                // ストロークとの距離判定
                 for (let p of stroke) {
+                    // 描画されている座標と比較
                     const sx = (p.x + offsetX) * scale;
-                    const sy = p.y * scale;
+                    const sy = (p.y + offsetY) * scale;
                     const dist = Math.hypot(sx - clickX, sy - clickY);
                     
                     if (dist < minDist) {
@@ -268,28 +267,23 @@
                 }
             });
 
-            // 判定範囲 (指だと太いので広めに)
+            // 判定範囲（指でも押しやすいように40px）
             if (minDist < 40 && targetIdx !== -1) {
-                // トグル処理
+                // 切り替え
                 if (strokeAssignments[targetIdx] === currentCharIndex) {
-                    strokeAssignments[targetIdx] = -1; // 解除
+                    strokeAssignments[targetIdx] = -1; 
                 } else {
-                    strokeAssignments[targetIdx] = currentCharIndex; // 選択
+                    strokeAssignments[targetIdx] = currentCharIndex;
                 }
                 draw();
             }
         });
 
         function confirmAndNext() {
-            // 現在の文字データを保存
             const char = rawData[currentLineIndex].text[currentCharIndex];
-            
-            // 現在選択されているストロークを抽出
             const selectedStrokes = [];
             strokesInLine.forEach((s, i) => {
                 if (strokeAssignments[i] === currentCharIndex) {
-                    // 座標を正規化して保存（重要）
-                    // ここではとりあえず生のまま保存し、後でPython側で正規化する方が安全
                     selectedStrokes.push(s); 
                 }
             });
@@ -298,7 +292,6 @@
                 if (!labeledData[char]) labeledData[char] = [];
                 labeledData[char].push(selectedStrokes);
             }
-
             currentCharIndex++;
             updateUI();
         }
@@ -306,26 +299,24 @@
         function prevChar() {
             if (currentCharIndex > 0) {
                 currentCharIndex--;
-                // 戻った文字の割り当てを解除（再選択させるため）
-                // ※UX的には保持したほうがいいが、修正のためなので解除する
-                /*
-                for(let i=0; i<strokeAssignments.length; i++) {
-                    if (strokeAssignments[i] === currentCharIndex) strokeAssignments[i] = -1;
-                }
-                */
-                // いや、保持したまま戻り、編集できるようにする
+                // 戻ったとき、その文字に割り当てていたストロークの選択状態は維持されるので
+                // そのまま修正が可能
                 updateUI();
-            } else if (currentLineIndex > 0) {
-                alert("前の行には戻れません（仕様）");
+            } else {
+                alert("これ以上戻れません");
             }
         }
 
         function finishAll() {
-            document.getElementById('status-panel').innerHTML = "<h2>完了！</h2><p>すべての仕分けが終わりました。</p>";
+            document.getElementById('status-panel').innerHTML = "<h2 style='color:#34c759'>完了！</h2><p>お疲れ様でした。</p>";
             document.querySelector('.btn-back').style.display = 'none';
             document.querySelector('.btn-next').style.display = 'none';
             document.querySelector('.btn-save').style.display = 'block';
-            draw(); // 最後描画
+            
+            // 完了後はすべて緑色で表示
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#00aa00';
+            // ... (簡易表示)
         }
 
         function saveData() {
@@ -339,6 +330,11 @@
             a.click();
             document.body.removeChild(a);
         }
+        
+        // 画面回転時などの対応
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
 
     </script>
 </body>

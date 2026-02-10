@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.9</title>
+    <title>文章収集 v3.9.1</title>
     <style>
         /* --- 基本設定 --- */
         * {
@@ -134,7 +134,6 @@
         
         .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; flex: 1; }
         .btn-clear { background: #ff3b30; color: white; flex: 1; }
-        /* 手動保存ボタンを追加 */
         .btn-save { background: #34c759; color: white; flex: 1; } 
         .btn-next { background: #007aff; color: white; flex: 1.5; }
         
@@ -156,7 +155,7 @@
         <div id="status-bar">
             <div id="touch-debug">Waiting...</div>
             <button id="btn-calibrate">位置調整</button>
-            <div class="version-badge">v3.9 (Safe)</div>
+            <div class="version-badge">v3.9.1 (Short)</div>
         </div>
         <div id="target-text">読み込み中...</div>
         <div id="progress-info">-- / --</div>
@@ -184,11 +183,12 @@
     </div>
 
     <script>
+        // ★修正された短いリスト
         const SENTENCE_LIST = [
             "いろはにほへと ちりぬるを わかよたれそ つねならむ",
             "うゐのおくやま けふこえて あさきゆめみし ゑひもせす",
             "アイウエオ カキクケコ サシスセソ タチツテト",
-            "ナニヌネノ　ハヒフヘホ　マミムメモ　ヤユヨ　ワヲン
+            "ナニヌネノ ハヒフヘホ マミムメモ ヤユヨ ワヲン",
             "永永無窮の天地は、我々のためにあり。"
         ];
 
@@ -231,7 +231,7 @@
 
         function updateUI() {
             if (currentIndex >= SENTENCE_LIST.length) {
-                document.getElementById('target-text').innerText = "すべて完了しました！";
+                document.getElementById('target-text').innerText = "すべて完了しました！保存を押してください";
                 document.getElementById('progress-info').innerText = "Complete";
                 return;
             }
@@ -258,9 +258,12 @@
             // 手動保存ボタン
             document.getElementById('btn-save').addEventListener('touchstart', (e) => {
                 e.preventDefault(); 
-                // 現在のストロークがあれば一時保存してからダウンロード
                 if (currentStrokes.length > 0) {
-                     alert("書きかけのデータがあります。「次へ」を押して確定してから保存してください。");
+                     // まだ書きかけの場合、アラートを出すか、自動で追加して保存するか
+                     if(confirm("書きかけのデータがあります。現在の行を確定して保存しますか？")) {
+                        // 強制的に次へ進む処理をして保存
+                        goNext(true); // trueフラグで保存のみ実行させるなどの分岐も可だが、シンプルにgoNextしてdownloadJSON呼ぶ
+                     }
                 } else {
                      downloadJSON();
                 }
@@ -466,8 +469,8 @@
         }
 
         // --- 保存・次へロジック ---
-        function goNext() {
-            if (currentStrokes.length === 0) { alert("まだ何も書いていません"); return; }
+        function goNext(forceSave = false) {
+            if (currentStrokes.length === 0 && !forceSave) { alert("まだ何も書いていません"); return; }
             
             // ★累積保存：既存の配列に追加し続ける
             sentenceData.push({
@@ -476,8 +479,9 @@
                 timestamp: new Date().toISOString()
             });
 
-            // 5行ごとに自動バックアップ
-            if ((currentIndex + 1) % 5 === 0 || currentIndex === SENTENCE_LIST.length - 1) {
+            // 5行ごとに自動バックアップ（今回はリストが短いので毎回保存でもいいが、ロジック維持）
+            // または forceSaveなら即時保存
+            if (forceSave || (currentIndex + 1) % 5 === 0 || currentIndex === SENTENCE_LIST.length - 1) {
                 downloadJSON();
             }
 
@@ -488,17 +492,15 @@
         }
 
         function downloadJSON() {
-            // ファイル名には「ここまで書いた行数」を入れる
             const count = sentenceData.length;
             const jsonString = JSON.stringify({
                 metadata: { type: "sentence_cumulative", author: "User", date: new Date().toISOString() },
-                data: sentenceData // ★ここには過去分もすべて入っている
+                data: sentenceData // ★過去分もすべて入っている
             });
             const blob = new Blob([jsonString], {type: "application/json"});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            // ファイル名をわかりやすく
             a.download = `handwriting_data_1-${count}.json`;
             document.body.appendChild(a);
             a.click();
@@ -514,4 +516,3 @@
     </script>
 </body>
 </html>
-

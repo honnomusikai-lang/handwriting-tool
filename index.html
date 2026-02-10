@@ -2,12 +2,22 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ストローク仕分け機 v1.1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ストローク仕分け機 v1.2</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; margin: 0; padding: 10px; height: 100vh; box-sizing: border-box; touch-action: none; }
+        /* 全体のタッチ挙動を制限 */
+        body { 
+            font-family: sans-serif; 
+            display: flex; flex-direction: column; align-items: center; 
+            background: #f0f0f0; 
+            margin: 0; padding: 10px; 
+            height: 100vh; height: 100dvh; /* iOS対応 */
+            box-sizing: border-box; 
+            touch-action: none; /* ブラウザ標準のパン・ズームを禁止 */
+            overflow: hidden; /* スクロール禁止 */
+        }
         
-        h1 { margin: 0 0 10px 0; font-size: 1rem; color: #555; }
+        h1 { margin: 0 0 10px 0; font-size: 1rem; color: #555; pointer-events: none; }
         
         #file-area { margin-bottom: 20px; text-align: center; }
         input[type=file] { font-size: 1rem; }
@@ -20,14 +30,15 @@
             background: white; padding: 10px; border-radius: 8px; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px;
             text-align: center; width: 100%; max-width: 600px;
-            flex: 0 0 auto; /* 高さを固定 */
+            flex: 0 0 auto;
+            pointer-events: none; /* 誤操作防止 */
         }
         
         #target-char { font-size: 3rem; font-weight: bold; color: #e00; line-height: 1; margin: 5px 0; }
         #target-context { font-size: 1rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         #canvas-wrapper {
-            flex: 1; /* 残りの高さを埋める */
+            flex: 1;
             width: 100%; max-width: 800px;
             position: relative;
             background: #fff;
@@ -37,13 +48,14 @@
             overflow: hidden;
         }
         
-        canvas { display: block; width: 100%; height: 100%; cursor: pointer; }
+        canvas { display: block; width: 100%; height: 100%; cursor: pointer; touch-action: none; }
 
-        .controls { display: flex; gap: 10px; width: 100%; max-width: 600px; justify-content: center; flex: 0 0 auto; padding-bottom: 10px; }
+        .controls { display: flex; gap: 10px; width: 100%; max-width: 600px; justify-content: center; flex: 0 0 auto; padding-bottom: 20px; }
         button {
             padding: 15px 0; width: 100%; font-size: 1rem; border: none; border-radius: 8px;
             font-weight: bold; cursor: pointer; color: white;
             touch-action: manipulation;
+            pointer-events: auto;
         }
         .btn-back { background: #888; flex: 1; }
         .btn-next { background: #007aff; flex: 2; }
@@ -53,7 +65,7 @@
 </head>
 <body>
 
-    <h1>ストローク仕分け機 v1.1</h1>
+    <h1>ストローク仕分け機 v1.2</h1>
     
     <div id="file-area">
         <p>iPadのデータを選択してください</p>
@@ -79,6 +91,15 @@
     </div>
 
     <script>
+        // --- ズーム禁止の魔法 (ここが重要) ---
+        document.addEventListener('gesturestart', function(e) {
+            e.preventDefault(); // ピンチズーム禁止
+        });
+        document.addEventListener('dblclick', function(e) {
+            e.preventDefault(); // ダブルタップ禁止
+        }, { passive: false });
+        
+        // --- 以下ロジック ---
         let rawData = [];
         let labeledData = {}; 
         
@@ -93,9 +114,8 @@
         
         let scale = 1;
         let offsetX = 0;
-        let offsetY = 0; // 追加: Y軸補正用
+        let offsetY = 0;
 
-        // --- ファイル読み込み ---
         document.getElementById('file-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -125,24 +145,25 @@
             strokesInLine = line.strokes;
             strokeAssignments = new Array(strokesInLine.length).fill(-1);
             
-            // レイアウト再計算（ここが重要）
-            // 少し遅延させて、DOMのサイズが確定してから計算する
             setTimeout(() => {
                 resizeCanvas();
                 updateUI();
             }, 100);
         }
 
-        // --- 修正されたキャンバスリサイズ ---
         function resizeCanvas() {
             if (strokesInLine.length === 0) return;
 
-            // ラッパーのサイズを取得
             const wrapRect = wrapper.getBoundingClientRect();
-            canvas.width = wrapRect.width;
-            canvas.height = wrapRect.height;
+            // Retina対応（ぼやけ防止）
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = wrapRect.width * dpr;
+            canvas.height = wrapRect.height * dpr;
+            canvas.style.width = wrapRect.width + "px";
+            canvas.style.height = wrapRect.height + "px";
+            
+            ctx.scale(dpr, dpr);
 
-            // ストローク全体の範囲を計算
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             strokesInLine.forEach(s => s.forEach(p => {
                 if(p.x < minX) minX = p.x;
@@ -151,23 +172,21 @@
                 if(p.y > maxY) maxY = p.y;
             }));
             
-            // 余白（上下左右）
             const padding = 40;
             const contentW = maxX - minX;
             const contentH = maxY - minY;
             
-            // スケール計算（幅と高さ、どちらに合わせて縮小するか）
-            const scaleX = (canvas.width - padding * 2) / contentW;
-            const scaleY = (canvas.height - padding * 2) / contentH;
-            scale = Math.min(scaleX, scaleY, 1.5); // 拡大しすぎ防止
+            // ラッパーの大きさ基準でスケール計算
+            const scaleX = (wrapRect.width - padding * 2) / contentW;
+            const scaleY = (wrapRect.height - padding * 2) / contentH;
+            scale = Math.min(scaleX, scaleY, 2.0); 
             
-            // オフセット計算（中央寄せ）
-            // コンテンツの中心を、キャンバスの中心に合わせる
             const contentCenterX = minX + contentW / 2;
             const contentCenterY = minY + contentH / 2;
             
-            offsetX = (canvas.width / 2) / scale - contentCenterX;
-            offsetY = (canvas.height / 2) / scale - contentCenterY;
+            // 描画用のオフセット
+            offsetX = (wrapRect.width / 2) / scale - contentCenterX;
+            offsetY = (wrapRect.height / 2) / scale - contentCenterY;
             
             draw();
         }
@@ -201,7 +220,10 @@
         }
 
         function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const wrapRect = wrapper.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            ctx.clearRect(0, 0, wrapRect.width, wrapRect.height);
+            
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
 
@@ -209,8 +231,6 @@
                 const assigned = strokeAssignments[i];
                 
                 ctx.beginPath();
-                
-                // ★修正: XもYもオフセットしてスケーリング
                 const start = stroke[0];
                 ctx.moveTo((start.x + offsetX) * scale, (start.y + offsetY) * scale);
                 
@@ -219,18 +239,17 @@
                     ctx.lineTo((p.x + offsetX) * scale, (p.y + offsetY) * scale);
                 }
 
-                // 色分け
                 if (assigned === currentCharIndex) {
-                    ctx.strokeStyle = '#ff0000'; // 選択中（赤）
-                    ctx.lineWidth = 5 * scale;   // 太く
+                    ctx.strokeStyle = '#ff0000'; 
+                    ctx.lineWidth = 4;
                     ctx.globalAlpha = 1.0;
                 } else if (assigned !== -1 && assigned < currentCharIndex) {
-                    ctx.strokeStyle = '#00cc00'; // 確定済み（緑）
-                    ctx.lineWidth = 2 * scale;
-                    ctx.globalAlpha = 0.2;       // 薄くして邪魔にならないように
+                    ctx.strokeStyle = '#00cc00'; 
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.2;
                 } else {
-                    ctx.strokeStyle = '#000000'; // 未選択（黒）
-                    ctx.lineWidth = 2 * scale;
+                    ctx.strokeStyle = '#000000'; 
+                    ctx.lineWidth = 2;
                     ctx.globalAlpha = 1.0;
                 }
                 
@@ -241,8 +260,10 @@
 
         // --- 操作 ---
         canvas.addEventListener('pointerdown', function(e) {
-            e.preventDefault(); // スクロール防止
+            e.preventDefault(); 
+            // 座標計算の修正（スケールとオフセットを考慮）
             const rect = canvas.getBoundingClientRect();
+            // touchイベントの座標補正
             const clickX = e.clientX - rect.left;
             const clickY = e.clientY - rect.top;
             
@@ -250,14 +271,13 @@
             let targetIdx = -1;
             
             strokesInLine.forEach((stroke, i) => {
-                // 確定済み（過去の文字）は触れないようにする
                 if (strokeAssignments[i] !== -1 && strokeAssignments[i] < currentCharIndex) return;
 
-                // ストロークとの距離判定
                 for (let p of stroke) {
-                    // 描画されている座標と比較
+                    // 描画座標を再現
                     const sx = (p.x + offsetX) * scale;
                     const sy = (p.y + offsetY) * scale;
+                    
                     const dist = Math.hypot(sx - clickX, sy - clickY);
                     
                     if (dist < minDist) {
@@ -267,9 +287,8 @@
                 }
             });
 
-            // 判定範囲（指でも押しやすいように40px）
+            // 判定距離（画面上のピクセルで40px以内）
             if (minDist < 40 && targetIdx !== -1) {
-                // 切り替え
                 if (strokeAssignments[targetIdx] === currentCharIndex) {
                     strokeAssignments[targetIdx] = -1; 
                 } else {
@@ -284,6 +303,8 @@
             const selectedStrokes = [];
             strokesInLine.forEach((s, i) => {
                 if (strokeAssignments[i] === currentCharIndex) {
+                    // 保存時に座標を正規化（文字の中心を0,0にする）しておくと便利
+                    // ここでは後でPython処理するためにそのまま保存
                     selectedStrokes.push(s); 
                 }
             });
@@ -299,8 +320,8 @@
         function prevChar() {
             if (currentCharIndex > 0) {
                 currentCharIndex--;
-                // 戻ったとき、その文字に割り当てていたストロークの選択状態は維持されるので
-                // そのまま修正が可能
+                // 戻ったときに、その文字に割り当てていた選択を解除するならここ
+                // strokeAssignments.forEach((v,i) => { if(v === currentCharIndex) strokeAssignments[i] = -1; });
                 updateUI();
             } else {
                 alert("これ以上戻れません");
@@ -312,11 +333,7 @@
             document.querySelector('.btn-back').style.display = 'none';
             document.querySelector('.btn-next').style.display = 'none';
             document.querySelector('.btn-save').style.display = 'block';
-            
-            // 完了後はすべて緑色で表示
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = '#00aa00';
-            // ... (簡易表示)
         }
 
         function saveData() {
@@ -331,9 +348,8 @@
             document.body.removeChild(a);
         }
         
-        // 画面回転時などの対応
         window.addEventListener('resize', () => {
-            resizeCanvas();
+            setTimeout(resizeCanvas, 200);
         });
 
     </script>

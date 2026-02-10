@@ -2,517 +2,344 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>文章収集 v3.9.1</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ストローク仕分け機</title>
     <style>
-        /* --- 基本設定 --- */
-        * {
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-            touch-action: none; 
-            box-sizing: border-box;
-        }
-
-        html, body {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            background-color: #e0e0e0;
-            font-family: "Hiragino Mincho ProN", serif;
-            overflow: hidden; position: fixed;
-            display: flex; flex-direction: column;
-        }
-
-        /* --- ヘッダー --- */
-        #target-area {
-            flex: 0 0 auto;
-            padding: 10px;
-            background: #fff;
-            border-bottom: 1px solid #ccc;
-            text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            z-index: 10;
-            position: relative;
-        }
-        #target-text {
-            font-size: 1.1rem; color: #333; margin-bottom: 4px; font-weight: bold;
-            margin-top: 15px; 
-        }
-        #progress-info { font-size: 0.8rem; color: #888; font-family: sans-serif; }
-
-        /* --- ステータス --- */
-        #status-bar {
-            position: absolute; top: 5px; left: 0; width: 100%;
-            display: flex; justify-content: space-between; align-items: center; padding: 0 10px;
-            pointer-events: none;
-        }
-        .version-badge {
-            font-size: 0.7rem; background: #333; color: #fff; 
-            padding: 2px 6px; border-radius: 4px; font-family: sans-serif;
-        }
-        #touch-debug {
-            font-size: 0.7rem; color: #f00; font-family: monospace; font-weight: bold;
-        }
-        .pen-active { color: #00a000 !important; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; margin: 0; padding: 20px; height: 100vh; box-sizing: border-box; }
+        h1 { margin: 0 0 10px 0; font-size: 1.2rem; }
         
-        #btn-calibrate {
-            font-size: 0.7rem; background: #666; color: #fff; 
-            padding: 4px 8px; border-radius: 4px; border: none;
-            pointer-events: auto; cursor: pointer;
+        #file-area { margin-bottom: 10px; }
+        
+        #work-area { 
+            display: none; flex-direction: column; align-items: center; width: 100%; flex: 1;
         }
 
-        /* --- キャンバス --- */
-        #canvas-wrapper {
-            flex: 0 0 auto; 
-            height: 300px;
-            width: 96%;
-            margin: auto; 
+        #status-panel {
+            background: white; padding: 10px 20px; border-radius: 8px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 10px;
+            text-align: center; width: 100%; max-width: 600px;
+        }
+        
+        #target-char { font-size: 3rem; font-weight: bold; color: #e00; line-height: 1.2; }
+        #target-context { font-size: 1rem; color: #888; }
+        
+        #canvas-container {
             position: relative;
-            background: #fff;
-            border-radius: 4px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            border-left: 6px solid #ff6b6b; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            background: white;
+            margin-bottom: 10px;
+            overflow: hidden;
+            touch-action: none; /* 重要 */
         }
+        
+        canvas { display: block; cursor: pointer; }
 
-        canvas {
-            display: block; width: 100%; height: 100%;
-            touch-action: none; cursor: crosshair;
-        }
-
-        .guideline {
-            position: absolute; left: 10px; right: 10px; top: 70%; 
-            height: 1px; background-color: rgba(0, 0, 255, 0.15); pointer-events: none;
-        }
-        .centerline {
-            position: absolute; left: 10px; right: 10px; top: 50%;
-            height: 1px; border-top: 1px dashed rgba(0, 0, 0, 0.15); pointer-events: none;
-        }
-
-        /* --- キャリブレーション --- */
-        #calibration-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
-            z-index: 100;
-            display: none;
-            flex-direction: column;
-            justify-content: center; align-items: center;
-        }
-        #calib-msg { color: white; font-size: 1.2rem; margin-bottom: 20px; text-align: center; pointer-events: none; }
-        .crosshair {
-            position: absolute; width: 40px; height: 40px;
-            border: 2px solid white; border-radius: 50%; pointer-events: none;
-        }
-        .crosshair::before { content: ''; position: absolute; top: 18px; left: 0; width: 36px; height: 2px; background: white; }
-        .crosshair::after { content: ''; position: absolute; top: 0; left: 18px; width: 2px; height: 36px; background: white; }
-        #calib-target { position: absolute; width: 60px; height: 60px; background: transparent; z-index: 101; }
-
-        /* --- コントロール --- */
-        .controls {
-            flex: 0 0 130px; 
-            background: #eee;
-            display: flex; flex-direction: column;
-            justify-content: center; align-items: center; gap: 10px;
-            padding-bottom: 20px; 
-            border-top: 1px solid #ccc;
-            z-index: 20;
-        }
-        .buttons-row { display: flex; gap: 10px; width: 95%; justify-content: center; }
-        .slider-container {
-            width: 80%; display: flex; align-items: center; gap: 10px;
-            font-size: 0.8rem; color: #555;
-        }
-        input[type=range] { flex: 1; accent-color: #333; touch-action: manipulation; }
-
+        .controls { display: flex; gap: 20px; width: 100%; max-width: 600px; justify-content: center; }
         button {
-            padding: 12px 15px; font-size: 0.9rem; border: none;
-            border-radius: 25px; font-weight: bold;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-family: sans-serif;
-            touch-action: manipulation; 
-            pointer-events: auto; cursor: pointer; transition: all 0.1s;
+            padding: 15px 30px; font-size: 1rem; border: none; border-radius: 8px;
+            font-weight: bold; cursor: pointer; color: white;
         }
-        
-        .btn-undo { background: #fff; color: #555; border: 1px solid #ccc; flex: 1; }
-        .btn-clear { background: #ff3b30; color: white; flex: 1; }
-        .btn-save { background: #34c759; color: white; flex: 1; } 
-        .btn-next { background: #007aff; color: white; flex: 1.5; }
-        
-        button:active { transform: scale(0.95); opacity: 0.8; }
-        .btn-confirm-mode { background: #d00000 !important; animation: pulse 0.5s infinite alternate; }
-        @keyframes pulse { from { opacity: 1; } to { opacity: 0.7; } }
+        .btn-back { background: #888; }
+        .btn-next { background: #007aff; flex: 1; }
+        .btn-save { background: #34c759; display: none; }
 
+        .highlight { background: #ffcccc; }
     </style>
 </head>
 <body>
 
-    <div id="calibration-overlay">
-        <div id="calib-msg">左上の十字の中心を<br>ペンでタッチしてください</div>
-        <div id="calib-cross" class="crosshair"></div>
-        <div id="calib-target"></div>
-    </div>
-
-    <div id="target-area">
-        <div id="status-bar">
-            <div id="touch-debug">Waiting...</div>
-            <button id="btn-calibrate">位置調整</button>
-            <div class="version-badge">v3.9.1 (Short)</div>
-        </div>
-        <div id="target-text">読み込み中...</div>
-        <div id="progress-info">-- / --</div>
-    </div>
+    <h1>ストローク仕分け機</h1>
     
-    <div id="canvas-wrapper">
-        <div class="guideline"></div>
-        <div class="centerline"></div>
-        <canvas id="main-canvas"></canvas>
+    <div id="file-area">
+        <input type="file" id="file-input" accept=".json">
+        <p style="font-size:0.8rem">※iPadで集めたJSONファイルを選択してください</p>
     </div>
 
-    <div class="controls">
-        <div class="slider-container">
-            <span>感度:高</span>
-            <input type="range" id="force-threshold" min="0" max="0.2" step="0.01" value="0.05">
-            <span>低</span>
-            <span id="threshold-val">0.05</span>
+    <div id="work-area">
+        <div id="status-panel">
+            <div id="target-context">読み込み中...</div>
+            <div id="target-char">?</div>
+            <div style="font-size: 0.8rem; margin-top:5px;">この文字の線をすべてタップしてください</div>
         </div>
-        <div class="buttons-row">
-            <button id="btn-undo" class="btn-undo">戻る</button>
-            <button id="btn-clear" class="btn-clear">クリア</button>
-            <button id="btn-save" class="btn-save">保存</button>
-            <button id="btn-next" class="btn-next">次へ</button>
+
+        <div id="canvas-container">
+            <canvas id="main-canvas"></canvas>
+        </div>
+
+        <div class="controls">
+            <button class="btn-back" onclick="prevChar()">＜ 戻る</button>
+            <button class="btn-next" onclick="confirmAndNext()">確定して次へ ＞</button>
+            <button class="btn-save" onclick="saveData()">保存する</button>
         </div>
     </div>
 
     <script>
-        // ★修正された短いリスト
-        const SENTENCE_LIST = [
-            "いろはにほへと ちりぬるを わかよたれそ つねならむ",
-            "うゐのおくやま けふこえて あさきゆめみし ゑひもせす",
-            "アイウエオ カキクケコ サシスセソ タチツテト",
-            "ナニヌネノ ハヒフヘホ マミムメモ ヤユヨ ワヲン",
-            "永永無窮の天地は、我々のためにあり。"
-        ];
-
-        let currentIndex = 0;
-        let sentenceData = []; // 全データをここに蓄積し続ける
-        let currentStrokes = [];
-        let currentStroke = [];
-
-        const canvas = document.getElementById('main-canvas');
-        const ctx = canvas.getContext('2d', { alpha: false });
-        const debugDiv = document.getElementById('touch-debug');
+        let rawData = [];
+        let labeledData = {}; // { "あ": [ [stroke...], [stroke...] ] }
         
-        let rect = canvas.getBoundingClientRect();
-        let activePenId = null; 
-        let pressureThreshold = 0.05;
+        // 作業状態
+        let currentLineIndex = 0;
+        let currentCharIndex = 0;
+        let strokesInLine = []; // その行の全ストローク
+        let strokeAssignments = []; // ストロークごとの所属文字インデックス (-1は未割り当て)
+        
+        // Canvas設定
+        const canvas = document.getElementById('main-canvas');
+        const ctx = canvas.getContext('2d');
+        let scale = 1;
+        let offsetX = 0;
 
-        let offset = { x: 0, y: 0 };
-        let calibStep = 0;
-        let calibPoints = [];
-        const TARGET_INSET = 50; 
+        // --- ファイル読み込み ---
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    // v3.9の形式に対応
+                    rawData = json.data ? json.data : (Array.isArray(json) ? json : []);
+                    
+                    if (rawData.length === 0) { alert("データが空です"); return; }
+                    
+                    startLabeling();
+                } catch (err) {
+                    alert("読み込みエラー: " + err);
+                }
+            };
+            reader.readAsText(file);
+        });
 
-        function resizeCanvas() {
-            const wrapper = document.getElementById('canvas-wrapper');
-            rect = wrapper.getBoundingClientRect();
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = rect.width * dpr;
-            canvas.height = rect.height * dpr;
-            ctx.scale(dpr, dpr);
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            drawCanvas();
+        function startLabeling() {
+            document.getElementById('file-area').style.display = 'none';
+            document.getElementById('work-area').style.display = 'flex';
+            
+            currentLineIndex = 0;
+            currentCharIndex = 0;
+            loadLine(0);
         }
 
-        function initApp() {
+        function loadLine(index) {
+            if (index >= rawData.length) {
+                finishAll();
+                return;
+            }
+            
+            const line = rawData[index];
+            // スペースは飛ばす処理を入れてもいいが、今回はそのまま表示してスキップさせる
+            strokesInLine = line.strokes;
+            
+            // ストロークの所属をリセット (-1:未割り当て)
+            strokeAssignments = new Array(strokesInLine.length).fill(-1);
+            
+            // Canvasサイズ調整
             resizeCanvas();
             updateUI();
-            setupControls();
-            setupCalibration();
+        }
+
+        function resizeCanvas() {
+            // ストロークの範囲を計算
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            strokesInLine.forEach(s => s.forEach(p => {
+                if(p.x < minX) minX = p.x;
+                if(p.x > maxX) maxX = p.x;
+                if(p.y < minY) minY = p.y;
+                if(p.y > maxY) maxY = p.y;
+            }));
+            
+            // 余白
+            const padding = 50;
+            const contentW = maxX - minX + padding * 2;
+            const contentH = maxY - minY + padding * 2;
+            
+            // 画面幅に合わせる
+            const screenW = Math.min(window.innerWidth - 40, 800);
+            scale = screenW / contentW;
+            
+            canvas.width = screenW;
+            canvas.height = contentH * scale;
+            
+            // 描画オフセット
+            offsetX = -minX + padding;
+            
+            draw();
         }
 
         function updateUI() {
-            if (currentIndex >= SENTENCE_LIST.length) {
-                document.getElementById('target-text').innerText = "すべて完了しました！保存を押してください";
-                document.getElementById('progress-info').innerText = "Complete";
+            const line = rawData[currentLineIndex];
+            const text = line.text;
+            
+            if (currentCharIndex >= text.length) {
+                // 行終了 -> 次の行へ
+                currentLineIndex++;
+                currentCharIndex = 0;
+                loadLine(currentLineIndex);
                 return;
             }
-            document.getElementById('target-text').innerText = SENTENCE_LIST[currentIndex];
-            document.getElementById('progress-info').innerText = `行: ${currentIndex + 1} / ${SENTENCE_LIST.length}`;
+
+            const char = text[currentCharIndex];
+            
+            // スペースの場合は自動スキップ
+            if (char === ' ' || char === '　') {
+                currentCharIndex++;
+                updateUI();
+                return;
+            }
+
+            document.getElementById('target-char').innerText = char;
+            
+            // 文脈表示 (前後を表示)
+            const pre = text.substring(0, currentCharIndex);
+            const post = text.substring(currentCharIndex + 1);
+            document.getElementById('target-context').innerHTML = 
+                `<span style="color:#ccc">${pre}</span> <b>${char}</b> <span style="color:#ccc">${post}</span>`;
+                
+            draw();
         }
 
-        function setupControls() {
-            const slider = document.getElementById('force-threshold');
-            const valLabel = document.getElementById('threshold-val');
-            slider.addEventListener('input', (e) => {
-                pressureThreshold = parseFloat(e.target.value);
-                valLabel.innerText = pressureThreshold.toFixed(2);
-            });
+        // --- 描画 ---
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
 
-            document.getElementById('btn-undo').addEventListener('touchstart', (e) => {
-                e.preventDefault(); undoStroke();
-            });
+            strokesInLine.forEach((stroke, i) => {
+                const assigned = strokeAssignments[i];
+                
+                ctx.beginPath();
+                // 座標変換
+                const start = stroke[0];
+                ctx.moveTo((start.x + offsetX) * scale, start.y * scale);
+                
+                for (let j = 1; j < stroke.length; j++) {
+                    const p = stroke[j];
+                    ctx.lineTo((p.x + offsetX) * scale, p.y * scale);
+                }
 
-            document.getElementById('btn-next').addEventListener('touchstart', (e) => {
-                e.preventDefault(); goNext();
-            });
-            
-            // 手動保存ボタン
-            document.getElementById('btn-save').addEventListener('touchstart', (e) => {
-                e.preventDefault(); 
-                if (currentStrokes.length > 0) {
-                     // まだ書きかけの場合、アラートを出すか、自動で追加して保存するか
-                     if(confirm("書きかけのデータがあります。現在の行を確定して保存しますか？")) {
-                        // 強制的に次へ進む処理をして保存
-                        goNext(true); // trueフラグで保存のみ実行させるなどの分岐も可だが、シンプルにgoNextしてdownloadJSON呼ぶ
-                     }
+                // 色分け
+                if (assigned === currentCharIndex) {
+                    // 現在選択中のストローク (赤・太い)
+                    ctx.strokeStyle = '#ff0000';
+                    ctx.lineWidth = 4 * scale;
+                    ctx.globalAlpha = 1.0;
+                } else if (assigned !== -1 && assigned < currentCharIndex) {
+                    // 確定済みのストローク (緑・薄い)
+                    ctx.strokeStyle = '#00aa00';
+                    ctx.lineWidth = 2 * scale;
+                    ctx.globalAlpha = 0.3;
                 } else {
-                     downloadJSON();
+                    // 未割り当て (黒)
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 2 * scale;
+                    ctx.globalAlpha = 1.0;
+                }
+                
+                ctx.stroke();
+            });
+            ctx.globalAlpha = 1.0;
+        }
+
+        // --- 操作 ---
+        // タッチ判定
+        canvas.addEventListener('pointerdown', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = (e.clientX - rect.left);
+            const clickY = (e.clientY - rect.top);
+            
+            // クリック位置に最も近いストロークを探す
+            let minDist = Infinity;
+            let targetIdx = -1;
+            
+            strokesInLine.forEach((stroke, i) => {
+                // すでに他の文字に確定しているものは除外（修正したい場合は戻るボタンで）
+                if (strokeAssignments[i] !== -1 && strokeAssignments[i] !== currentCharIndex) return;
+
+                // ストローク内の各点との距離を測る
+                for (let p of stroke) {
+                    const sx = (p.x + offsetX) * scale;
+                    const sy = p.y * scale;
+                    const dist = Math.hypot(sx - clickX, sy - clickY);
+                    
+                    if (dist < minDist) {
+                        minDist = dist;
+                        targetIdx = i;
+                    }
                 }
             });
 
-            const clearBtn = document.getElementById('btn-clear');
-            let clearTimer = null;
-            clearBtn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                if (clearBtn.classList.contains('btn-confirm-mode')) {
-                    currentStrokes = [];
-                    drawCanvas();
-                    clearBtn.innerText = "クリア";
-                    clearBtn.classList.remove('btn-confirm-mode');
-                    if (clearTimer) clearTimeout(clearTimer);
+            // 判定範囲 (指だと太いので広めに)
+            if (minDist < 40 && targetIdx !== -1) {
+                // トグル処理
+                if (strokeAssignments[targetIdx] === currentCharIndex) {
+                    strokeAssignments[targetIdx] = -1; // 解除
                 } else {
-                    clearBtn.innerText = "実行?";
-                    clearBtn.classList.add('btn-confirm-mode');
-                    clearTimer = setTimeout(() => {
-                        clearBtn.innerText = "クリア";
-                        clearBtn.classList.remove('btn-confirm-mode');
-                    }, 3000);
+                    strokeAssignments[targetIdx] = currentCharIndex; // 選択
                 }
-            });
+                draw();
+            }
+        });
+
+        function confirmAndNext() {
+            // 現在の文字データを保存
+            const char = rawData[currentLineIndex].text[currentCharIndex];
             
-            document.getElementById('btn-calibrate').addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                startCalibration();
-            });
-        }
-
-        function startCalibration() {
-            document.getElementById('calibration-overlay').style.display = 'flex';
-            calibStep = 0;
-            calibPoints = [];
-            moveCrosshair();
-        }
-
-        function moveCrosshair() {
-            const cross = document.getElementById('calib-cross');
-            const target = document.getElementById('calib-target');
-            const msg = document.getElementById('calib-msg');
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-
-            let tx, ty, text;
-            if (calibStep === 0) { tx = TARGET_INSET; ty = TARGET_INSET; text="左上"; }
-            else if (calibStep === 1) { tx = w - TARGET_INSET; ty = TARGET_INSET; text="右上"; }
-            else if (calibStep === 2) { tx = w - TARGET_INSET; ty = h - TARGET_INSET; text="右下"; }
-            else if (calibStep === 3) { tx = TARGET_INSET; ty = h - TARGET_INSET; text="左下"; }
-
-            cross.style.left = (tx - 20) + 'px';
-            cross.style.top = (ty - 20) + 'px';
-            target.style.left = (tx - 30) + 'px';
-            target.style.top = (ty - 30) + 'px';
-            msg.innerText = `${text}の十字の中心を\nペンでタッチしてください`;
-        }
-
-        function setupCalibration() {
-            const target = document.getElementById('calib-target');
-            target.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                const touch = e.touches[0];
-                const tx = touch.clientX;
-                const ty = touch.clientY;
-                const rect = target.getBoundingClientRect();
-                const cx = rect.left + rect.width/2;
-                const cy = rect.top + rect.height/2;
-                const dx = tx - cx;
-                const dy = ty - cy;
-                calibPoints.push({dx, dy});
-                calibStep++;
-                if (calibStep < 4) { moveCrosshair(); } else { finishCalibration(); }
-            });
-        }
-
-        function finishCalibration() {
-            let avgX = 0, avgY = 0;
-            calibPoints.forEach(p => { avgX += p.dx; avgY += p.dy; });
-            offset.x = avgX / 4;
-            offset.y = avgY / 4;
-            document.getElementById('calibration-overlay').style.display = 'none';
-            alert(`補正完了\nX: ${offset.x.toFixed(1)}px, Y: ${offset.y.toFixed(1)}px`);
-        }
-
-        function drawCanvas() {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, rect.width, rect.height);
-            currentStrokes.forEach(stroke => drawPath(stroke));
-            if (currentStroke.length > 0) drawPath(currentStroke);
-        }
-
-        function drawPath(path) {
-            if (path.length < 1) return;
-            ctx.beginPath();
-            ctx.moveTo(path[0].x, path[0].y);
-            for (let i = 0; i < path.length; i++) {
-                const p = path[i];
-                const width = p.f * 1.5 + 1.0; 
-                ctx.lineWidth = width;
-                if (i > 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(path[i-1].x, path[i-1].y);
-                    ctx.lineTo(p.x, p.y);
-                    ctx.strokeStyle = '#000';
-                    ctx.stroke();
+            // 現在選択されているストロークを抽出
+            const selectedStrokes = [];
+            strokesInLine.forEach((s, i) => {
+                if (strokeAssignments[i] === currentCharIndex) {
+                    // 座標を正規化して保存（重要）
+                    // ここではとりあえず生のまま保存し、後でPython側で正規化する方が安全
+                    selectedStrokes.push(s); 
                 }
-            }
-        }
-
-        function getTouchPoint(touch) {
-            const rawX = touch.clientX - offset.x; 
-            const rawY = touch.clientY - offset.y;
-            return {
-                x: +(rawX - rect.left).toFixed(1),
-                y: +(rawY - rect.top).toFixed(1),
-                f: +(touch.force || 0.5).toFixed(3),
-                t: Date.now()
-            };
-        }
-
-        canvas.addEventListener('touchstart', e => {
-            e.preventDefault();
-            if (activePenId !== null) return;
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const t = e.changedTouches[i];
-                if (t.touchType === 'stylus') {
-                    activePenId = t.identifier;
-                    const force = t.force || 0;
-                    if (force < pressureThreshold) {
-                        debugDiv.innerText = `Hovering... (${force.toFixed(2)})`;
-                        return;
-                    }
-                    debugDiv.innerText = `Writing (${force.toFixed(2)})`;
-                    debugDiv.className = "pen-active";
-                    const pt = getTouchPoint(t);
-                    currentStroke = [pt];
-                    ctx.beginPath();
-                    ctx.arc(pt.x, pt.y, (pt.f * 1.5 + 1.0)/2, 0, Math.PI * 2);
-                    ctx.fillStyle = '#000';
-                    ctx.fill();
-                    break;
-                }
-            }
-        }, { passive: false });
-
-        canvas.addEventListener('touchmove', e => {
-            if (activePenId === null) return;
-            e.preventDefault();
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const t = e.changedTouches[i];
-                if (t.identifier === activePenId) {
-                    const force = t.force || 0;
-                    const pt = getTouchPoint(t);
-                    if (force < pressureThreshold) {
-                         debugDiv.innerText = `Hovering... (${force.toFixed(2)})`;
-                         return;
-                    }
-                    if (currentStroke.length === 0) {
-                         currentStroke = [pt];
-                         ctx.beginPath();
-                         ctx.moveTo(pt.x, pt.y);
-                         return;
-                    }
-                    currentStroke.push(pt);
-                    debugDiv.innerText = `Writing (${force.toFixed(2)})`;
-                    const prev = currentStroke[currentStroke.length - 2];
-                    if (prev) {
-                        ctx.beginPath();
-                        ctx.moveTo(prev.x, prev.y);
-                        ctx.lineTo(pt.x, pt.y);
-                        const width = pt.f * 1.5 + 1.0;
-                        ctx.lineWidth = width;
-                        ctx.strokeStyle = '#000';
-                        ctx.stroke();
-                    }
-                    break;
-                }
-            }
-        }, { passive: false });
-
-        const handleEnd = (e) => {
-            if (activePenId === null) return;
-            e.preventDefault();
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const t = e.changedTouches[i];
-                if (t.identifier === activePenId) {
-                    if (currentStroke.length > 0) currentStrokes.push(currentStroke);
-                    currentStroke = [];
-                    activePenId = null;
-                    debugDiv.innerText = "Waiting...";
-                    debugDiv.className = "";
-                    break;
-                }
-            }
-        };
-
-        canvas.addEventListener('touchend', handleEnd, { passive: false });
-        canvas.addEventListener('touchcancel', handleEnd, { passive: false });
-
-        function undoStroke() {
-            if (currentStrokes.length > 0) { currentStrokes.pop(); drawCanvas(); }
-        }
-
-        // --- 保存・次へロジック ---
-        function goNext(forceSave = false) {
-            if (currentStrokes.length === 0 && !forceSave) { alert("まだ何も書いていません"); return; }
-            
-            // ★累積保存：既存の配列に追加し続ける
-            sentenceData.push({
-                text: SENTENCE_LIST[currentIndex],
-                strokes: JSON.parse(JSON.stringify(currentStrokes)),
-                timestamp: new Date().toISOString()
             });
 
-            // 5行ごとに自動バックアップ（今回はリストが短いので毎回保存でもいいが、ロジック維持）
-            // または forceSaveなら即時保存
-            if (forceSave || (currentIndex + 1) % 5 === 0 || currentIndex === SENTENCE_LIST.length - 1) {
-                downloadJSON();
+            if (selectedStrokes.length > 0) {
+                if (!labeledData[char]) labeledData[char] = [];
+                labeledData[char].push(selectedStrokes);
             }
 
-            currentIndex++;
-            currentStrokes = [];
-            drawCanvas();
+            currentCharIndex++;
             updateUI();
         }
 
-        function downloadJSON() {
-            const count = sentenceData.length;
-            const jsonString = JSON.stringify({
-                metadata: { type: "sentence_cumulative", author: "User", date: new Date().toISOString() },
-                data: sentenceData // ★過去分もすべて入っている
-            });
+        function prevChar() {
+            if (currentCharIndex > 0) {
+                currentCharIndex--;
+                // 戻った文字の割り当てを解除（再選択させるため）
+                // ※UX的には保持したほうがいいが、修正のためなので解除する
+                /*
+                for(let i=0; i<strokeAssignments.length; i++) {
+                    if (strokeAssignments[i] === currentCharIndex) strokeAssignments[i] = -1;
+                }
+                */
+                // いや、保持したまま戻り、編集できるようにする
+                updateUI();
+            } else if (currentLineIndex > 0) {
+                alert("前の行には戻れません（仕様）");
+            }
+        }
+
+        function finishAll() {
+            document.getElementById('status-panel').innerHTML = "<h2>完了！</h2><p>すべての仕分けが終わりました。</p>";
+            document.querySelector('.btn-back').style.display = 'none';
+            document.querySelector('.btn-next').style.display = 'none';
+            document.querySelector('.btn-save').style.display = 'block';
+            draw(); // 最後描画
+        }
+
+        function saveData() {
+            const jsonString = JSON.stringify(labeledData);
             const blob = new Blob([jsonString], {type: "application/json"});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `handwriting_data_1-${count}.json`;
+            a.download = `labeled_handwriting.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
         }
 
-        window.addEventListener('load', initApp);
-        let resizeTimeout;
-        window.addEventListener('resize', () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(resizeCanvas, 200);
-        });
     </script>
 </body>
 </html>
